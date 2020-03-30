@@ -27,6 +27,15 @@ On Linux, as root:
 
 `ntfs2btrfs.exe /dev/sda1`
 
+Installation
+------------
+
+On Windows, go to the [Releases page](https://github.com/maharmstone/ntfs2btrfs/releases) and
+download the latest Zip file.
+
+For Linux or other operating systems, you will need to compile it yourself - see
+below.
+
 Compilation
 -----------
 
