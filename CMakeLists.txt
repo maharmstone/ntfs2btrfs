@@ -1,6 +1,9 @@
-cmake_minimum_required(VERSION 3.15)
-
-cmake_policy(SET CMP0091 NEW)
+if(MSVC)
+    cmake_minimum_required(VERSION 3.15)
+    cmake_policy(SET CMP0091 NEW)
+else()
+    cmake_minimum_required(VERSION 3.14.3)
+endif()
 
 project(ntfs2btrfs VERSION 20200330)
 
