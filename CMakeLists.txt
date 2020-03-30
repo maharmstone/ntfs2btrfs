@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 3.14.3)
+cmake_minimum_required(VERSION 3.15)
+
+cmake_policy(SET CMP0091 NEW)
 
 project(ntfs2btrfs VERSION 20200330)
 
@@ -20,6 +22,14 @@ else()
 endif()
 
 add_executable(ntfs2btrfs ${SRC_FILES})
+set_property(TARGET ntfs2btrfs PROPERTY
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+# Work around bug in MSVC version of cmake - see https://gitlab.kitware.com/cmake/cmake/-/merge_requests/4257
+set(CMAKE_ASM_MASM_COMPILE_OPTIONS_MSVC_RUNTIME_LIBRARY_MultiThreaded         "")
+set(CMAKE_ASM_MASM_COMPILE_OPTIONS_MSVC_RUNTIME_LIBRARY_MultiThreadedDLL      "")
+set(CMAKE_ASM_MASM_COMPILE_OPTIONS_MSVC_RUNTIME_LIBRARY_MultiThreadedDebug    "")
+set(CMAKE_ASM_MASM_COMPILE_OPTIONS_MSVC_RUNTIME_LIBRARY_MultiThreadedDebugDLL "")
 
 if(MSVC)
     target_compile_options(ntfs2btrfs PRIVATE /W4)
