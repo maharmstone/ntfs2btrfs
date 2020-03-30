@@ -7,7 +7,7 @@ endif()
 
 project(ntfs2btrfs VERSION 20200330)
 
-configure_file(src/config.h.in src/config.h)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -27,6 +27,8 @@ endif()
 add_executable(ntfs2btrfs ${SRC_FILES})
 set_property(TARGET ntfs2btrfs PROPERTY
     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Work around bug in MSVC version of cmake - see https://gitlab.kitware.com/cmake/cmake/-/merge_requests/4257
 set(CMAKE_ASM_MASM_COMPILE_OPTIONS_MSVC_RUNTIME_LIBRARY_MultiThreaded         "")
