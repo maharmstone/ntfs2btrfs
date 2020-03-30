@@ -30,8 +30,8 @@ On Linux, as root:
 Compilation
 -----------
 
-On Windows, open the source directory in a recent version of MSVC, right-
-click on CMakeLists.txt, and click Compile.
+On Windows, open the source directory in a recent version of MSVC, right-click
+on CMakeLists.txt, and click Compile.
 
 On Linux:
 
