@@ -66,6 +66,7 @@ What doesn't work
 * Large (i.e >16KB) ADSes (you're not using these either)
 * Preservation of LXSS metadata
 * Preservation of the case-sensitivity flag
+* Unusual cluster sizes (i.e. not 4 KB)
 * Compressed files (skipped for now)
 * Encrypted files
 
