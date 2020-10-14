@@ -2121,7 +2121,10 @@ static void protect_data(ntfs& dev, list<data_alloc>& runs, uint64_t cluster_sta
         uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
         uint64_t addr = allocate_data((cluster_end - cluster_start) * cluster_size);
 
-        sb.resize((cluster_end - cluster_start) * cluster_size);
+        if (cluster_end * cluster_size > orig_device_size)
+            sb.resize(orig_device_size - (cluster_start * cluster_size));
+        else
+            sb.resize((cluster_end - cluster_start) * cluster_size);
 
         dev.seek(cluster_start * cluster_size);
         dev.read(sb.data(), sb.length());
