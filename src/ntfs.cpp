@@ -736,6 +736,9 @@ void ntfs::seek(size_t pos) {
     }
 #else
     f.seekg(pos);
+
+    if (f.fail())
+        throw formatted_error(FMT_STRING("Error seeking to {:x}."), pos);
 #endif
 }
 
