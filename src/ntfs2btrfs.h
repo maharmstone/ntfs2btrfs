@@ -24,6 +24,7 @@
 #include <list>
 #include <string>
 #include <vector>
+#include <fmt/format.h>
 
 #ifdef _MSC_VER
 
@@ -34,6 +35,21 @@
 #endif
 
 #endif
+
+class formatted_error : public std::exception {
+public:
+    template<typename T, typename... Args>
+    formatted_error(const T& s, Args&&... args) {
+        msg = fmt::format(s, std::forward<Args>(args)...);
+    }
+
+    const char* what() const noexcept {
+        return msg.c_str();
+    }
+
+private:
+    std::string msg;
+};
 
 struct space {
     space(uint64_t offset, uint64_t length) : offset(offset), length(length) { }

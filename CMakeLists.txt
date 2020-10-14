@@ -12,6 +12,8 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in ${CMAKE_CURRENT_BINAR
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+find_package(fmt REQUIRED)
+
 set(SRC_FILES src/ntfs2btrfs.cpp
     src/ntfs.cpp
     src/crc32c.c)
@@ -27,6 +29,8 @@ endif()
 add_executable(ntfs2btrfs ${SRC_FILES})
 set_property(TARGET ntfs2btrfs PROPERTY
     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+target_link_libraries(ntfs2btrfs fmt::fmt-header-only)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 

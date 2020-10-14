@@ -164,13 +164,8 @@ static void create_data_chunks(ntfs& dev, const string& bmpdata) {
 static void add_item(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset, const void* data, uint16_t len) {
     auto ret = r.items.emplace(KEY{obj_id, obj_type, offset}, tree_item{});
 
-    if (!ret.second) {
-        char s[255];
-
-        sprintf(s, "Could not insert entry (%lx, %x, %lx) into root items list.", obj_id, obj_type, offset);
-
-        throw runtime_error(s);
-    }
+    if (!ret.second)
+        throw formatted_error(FMT_STRING("Could not insert entry ({:x}, {:x}, {:x}) into root items list."), obj_id, obj_type, offset);
 
     auto& it = ret.first->second;
 
@@ -285,7 +280,7 @@ static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) 
     }
 
     if (!found)
-        throw runtime_error("Could not find enough space to create new chunk.");
+        throw formatted_error(FMT_STRING("Could not find enough space to create new chunk."));
 
     chunks.emplace_back(disk_offset + chunk_virt_offset, chunk_size, disk_offset, system_chunk ? BLOCK_FLAG_SYSTEM : BLOCK_FLAG_METADATA);
 
@@ -314,7 +309,7 @@ static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) 
         }
     }
 
-    throw runtime_error("Could not allocate metadata address");
+    throw formatted_error(FMT_STRING("Could not allocate metadata address"));
 }
 
 static uint64_t allocate_data(uint64_t length) {
@@ -355,7 +350,7 @@ static uint64_t allocate_data(uint64_t length) {
     }
 
     if (!found)
-        throw runtime_error("Could not find enough space to create new chunk.");
+        throw formatted_error(FMT_STRING("Could not find enough space to create new chunk."));
 
     chunks.emplace_back(disk_offset + chunk_virt_offset, data_chunk_size, disk_offset, BLOCK_FLAG_DATA);
 
@@ -382,7 +377,7 @@ static uint64_t allocate_data(uint64_t length) {
         }
     }
 
-    throw runtime_error("Could not allocate data address");
+    throw formatted_error(FMT_STRING("Could not allocate data address"));
 }
 
 void root::create_trees(root& extent_root) {
@@ -440,7 +435,7 @@ void root::create_trees(root& extent_root) {
         }
 
         if (sizeof(leaf_node) + i.second.len + sizeof(tree_header) > tree_size)
-            throw runtime_error("Item too large for tree.");
+            throw formatted_error(FMT_STRING("Item too large for tree."));
 
         ln->key = i.first;
         ln->size = i.second.len;
@@ -609,7 +604,7 @@ void root::write_trees(ntfs& dev) {
         }
 
         if (!found)
-            throw runtime_error("Could not find chunk containing address."); // FIXME - include number
+            throw formatted_error(FMT_STRING("Could not find chunk containing address.")); // FIXME - include number
     }
 }
 
@@ -674,7 +669,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root) {
     }
 
     if (sys_chunk_size > SYS_CHUNK_ARRAY_SIZE)
-        throw runtime_error("System chunk list was too long (" + to_string(sys_chunk_size)  + " > " + to_string(SYS_CHUNK_ARRAY_SIZE) + ".");
+        throw formatted_error(FMT_STRING("System chunk list was too long ({} > {}."), sys_chunk_size, SYS_CHUNK_ARRAY_SIZE);
 
     total_used = data_size;
 
@@ -1356,7 +1351,7 @@ static bool split_runs(list<data_alloc>& runs, uint64_t offset, uint64_t length,
                 return true;
             }
 
-            throw runtime_error("FIXME - other mapping"); // FIXME
+            throw formatted_error(FMT_STRING("FIXME - other mapping")); // FIXME
         }
     }
 
@@ -1541,7 +1536,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         switch (att->TypeCode) {
             case ntfs_attribute::STANDARD_INFORMATION:
                 if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                    throw runtime_error("Error - STANDARD_INFORMATION is non-resident"); // FIXME - can this happen?
+                    throw formatted_error(FMT_STRING("Error - STANDARD_INFORMATION is non-resident")); // FIXME - can this happen?
 
                 standard_info = res_data;
             break;
@@ -1646,16 +1641,16 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             case ntfs_attribute::FILE_NAME: {
                 if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                    throw runtime_error("Error - FILE_NAME is non-resident"); // FIXME - can this happen?
+                    throw formatted_error(FMT_STRING("Error - FILE_NAME is non-resident")); // FIXME - can this happen?
 
                 if (att->Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]))
-                    throw runtime_error("FILE_NAME was truncated");
+                    throw formatted_error(FMT_STRING("FILE_NAME was truncated"));
 
                 auto fn = reinterpret_cast<const FILE_NAME*>(res_data.data());
 
                 if (fn->Namespace != FILE_NAME_DOS) {
                     if (att->Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]) + (fn->FileNameLength * sizeof(char16_t)))
-                        throw runtime_error("FILE_NAME was truncated");
+                        throw formatted_error(FMT_STRING("FILE_NAME was truncated"));
 
                     auto name = convert.to_bytes(fn->FileName, fn->FileName + fn->FileNameLength);
 
@@ -1690,7 +1685,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             case ntfs_attribute::SYMBOLIC_LINK:
                 if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                    throw runtime_error("Error - SYMBOLIC_LINK is non-resident"); // FIXME - can this happen?
+                    throw formatted_error(FMT_STRING("Error - SYMBOLIC_LINK is non-resident")); // FIXME - can this happen?
 
                 reparse_point = res_data;
                 symlink.clear();
@@ -2229,7 +2224,7 @@ static void calc_used_space(list<data_alloc>& runs, uint32_t cluster_size) {
             }
 
             if (!c)
-                throw runtime_error("Could not find chunk."); // FIXME - include address
+                throw formatted_error(FMT_STRING("Could not find chunk.")); // FIXME - include address
         }
 
         c->used += r.length * cluster_size;
