@@ -752,7 +752,12 @@ void ntfs::read(char* buf, size_t length) {
         throw formatted_error(FMT_STRING("ReadFile failed (error {})."), le);
     }
 #else
+    auto pos = f.tellg();
+
     f.read(buf, length);
+
+    if (f.fail())
+        throw formatted_error(FMT_STRING("Error reading {:x} bytes at {:x}."), length, pos);
 #endif
 }
 
@@ -766,6 +771,11 @@ void ntfs::write(const char* buf, size_t length) {
         throw formatted_error(FMT_STRING("WriteFile failed (error {})."), le);
     }
 #else
+    auto pos = f.tellg();
+
     f.write(buf, length);
+
+    if (f.fail())
+        throw formatted_error(FMT_STRING("Error writing {:x} bytes at {:x}."), length, pos);
 #endif
 }
