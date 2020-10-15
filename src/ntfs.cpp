@@ -74,8 +74,8 @@ ntfs_file::ntfs_file(ntfs& dev, uint64_t inode) : dev(dev), inode(inode) {
     process_fixups(&file_record->MultiSectorHeader, dev.file_record_size, dev.boot_sector->BytesPerSector);
 }
 
-void read_resident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>& mappings,
-                            uint32_t cluster_size) {
+void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>& mappings,
+                               uint32_t cluster_size) {
     uint64_t next_vcn = att->Form.Nonresident.LowestVcn, current_lcn = 0, current_vcn;
     uint8_t* stream = (uint8_t*)att + att->Form.Nonresident.MappingPairsOffset;
     uint64_t max_cluster = att->Form.Nonresident.ValidDataLength / cluster_size;
@@ -142,7 +142,7 @@ string ntfs_file::read_resident_attribute(size_t offset, size_t length, const AT
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     string ret;
 
-    read_resident_mappings(att, mappings, cluster_size);
+    read_nonresident_mappings(att, mappings, cluster_size);
 
     // FIXME - do we need to check that mappings is contiguous and in order?
 
@@ -262,7 +262,7 @@ list<mapping> ntfs_file::read_mappings(enum ntfs_attribute type, const u16string
 
         uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
 
-        read_resident_mappings(att, mappings, cluster_size);
+        read_nonresident_mappings(att, mappings, cluster_size);
 
         return false;
     });

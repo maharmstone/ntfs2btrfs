@@ -1573,7 +1573,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         // FIXME - if ValidDataLength < FileSize, will need to zero end
 
-                        read_resident_mappings(att, mappings, cluster_size);
+                        read_nonresident_mappings(att, mappings, cluster_size);
                     }
                 } else { // ADS
                     static const char xattr_prefix[] = "user.";
