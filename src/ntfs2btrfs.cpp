@@ -1420,9 +1420,9 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
                 } else if (m.lcn < r.old_start && m.lcn + m.length <= r.old_start + r.length) { // change end
                     mappings.emplace(it, m.lcn, m.vcn, r.old_start - m.lcn);
 
-                    m.lcn = r.new_start;
                     m.vcn += r.old_start - m.lcn;
                     m.length -= r.old_start - m.lcn;
+                    m.lcn = r.new_start;
                 } else if (m.lcn > r.old_start && m.lcn + m.length > r.old_start + r.length) { // change beginning
                     mappings.emplace(it, m.lcn - r.old_start + r.new_start, m.vcn, r.old_start + r.length - m.lcn);
 
