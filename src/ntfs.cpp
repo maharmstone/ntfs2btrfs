@@ -83,6 +83,9 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
     if (att->Form.Nonresident.ValidDataLength & (cluster_size - 1))
         max_cluster++;
 
+    if (max_cluster == 0)
+        return;
+
     while (true) {
         uint8_t v, l;
         int64_t v_val, l_val;
