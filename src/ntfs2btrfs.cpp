@@ -1524,6 +1524,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     bool atts_set = false;
     map<string, tuple<uint32_t, string>> xattrs;
     string filename;
+    uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
 
     ntfs_file f(dev, ntfs_inode);
 
@@ -1572,7 +1573,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         // FIXME - if ValidDataLength < FileSize, will need to zero end
 
-                        read_resident_mappings(att, mappings);
+                        read_resident_mappings(att, mappings, cluster_size);
                     }
                 } else { // ADS
                     static const char xattr_prefix[] = "user.";
