@@ -1351,7 +1351,7 @@ static bool split_runs(list<data_alloc>& runs, uint64_t offset, uint64_t length,
                 return true;
             }
 
-            throw formatted_error(FMT_STRING("FIXME - other mapping")); // FIXME
+            throw formatted_error(FMT_STRING("Error assigning space to file. This can occur if the space bitmap has become corrupted. Run chkdsk and try again."));
         }
     }
 
