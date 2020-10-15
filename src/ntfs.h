@@ -361,7 +361,7 @@ public:
     FILE_RECORD_SEGMENT_HEADER* file_record;
 
 private:
-    std::string read_resident_attribute(size_t offset, size_t length, const ATTRIBUTE_RECORD_HEADER* att);
+    std::string read_nonresident_attribute(size_t offset, size_t length, const ATTRIBUTE_RECORD_HEADER* att);
 
     std::vector<char> file_record_buf;
     ntfs& dev;

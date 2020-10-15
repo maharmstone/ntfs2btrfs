@@ -137,7 +137,7 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
     }
 }
 
-string ntfs_file::read_resident_attribute(size_t offset, size_t length, const ATTRIBUTE_RECORD_HEADER* att) {
+string ntfs_file::read_nonresident_attribute(size_t offset, size_t length, const ATTRIBUTE_RECORD_HEADER* att) {
     list<mapping> mappings;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     string ret;
@@ -225,7 +225,7 @@ string ntfs_file::read(size_t offset, size_t length, enum ntfs_attribute type, c
             throw formatted_error(FMT_STRING("FIXME - handle reading compressed attribute")); // FIXME
 
         if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-            ret = read_resident_attribute(offset, length, att);
+            ret = read_nonresident_attribute(offset, length, att);
         else {
             if (offset >= res_data.length())
                 ret = "";
@@ -541,7 +541,7 @@ void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEA
 
         if (att->TypeCode == ntfs_attribute::ATTRIBUTE_LIST) {
             if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                attlist = read_resident_attribute(0, att->Form.Nonresident.FileSize, att);
+                attlist = read_nonresident_attribute(0, att->Form.Nonresident.FileSize, att);
             else {
                 attlist.resize(att->Form.Resident.ValueLength);
 
