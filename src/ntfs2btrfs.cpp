@@ -2087,6 +2087,9 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
         string data;
         vector<uint32_t> csums;
 
+        if (r.offset * cluster_size >= orig_device_size)
+            break;
+
         data.resize(r.length * cluster_size);
         csums.resize(r.length * cluster_size / sector_size);
 
