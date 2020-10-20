@@ -2353,6 +2353,7 @@ static void update_dir_sizes(root& r) {
 
 static void convert(ntfs& dev) {
     uint32_t sector_size = 0x1000; // FIXME
+    uint64_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     list<data_alloc> runs;
 
     static const uint64_t image_inode = 0x101;
@@ -2415,6 +2416,23 @@ static void convert(ntfs& dev) {
     root& image_subvol = add_image_subvol(root_root, fstree_root);
 
     parse_bitmap(bmpdata, runs);
+
+    // make sure runs don't go beyond end of device
+
+    while (!runs.empty() && (runs.back().offset * cluster_size) + runs.back().length > device_size) {
+        if (runs.back().offset * cluster_size >= orig_device_size)
+            runs.pop_back();
+        else {
+            uint64_t len = orig_device_size - (runs.back().offset * cluster_size);
+
+            if (len % cluster_size)
+                runs.back().length = (len / cluster_size) + 1;
+            else
+                runs.back().length = len / cluster_size;
+
+            break;
+        }
+    }
 
     protect_superblocks(dev, runs);
 
