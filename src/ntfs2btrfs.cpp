@@ -1359,7 +1359,8 @@ static bool split_runs(list<data_alloc>& runs, uint64_t offset, uint64_t length,
 }
 
 static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& mappings, list<data_alloc>& runs) {
-    uint64_t clusters_per_chunk = data_chunk_size / (dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster);
+    uint64_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+    uint64_t clusters_per_chunk = data_chunk_size / cluster_size;
     list<mapping> mappings2;
 
     // avoid chunk boundaries
@@ -1391,7 +1392,7 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
 
     // change to avoid superblocks
 
-    for (const auto& r : relocs) {
+    for (auto& r : relocs) {
         for (auto it = mappings.begin(); it != mappings.end(); it++) {
             auto& m = *it;
 
@@ -1423,12 +1424,57 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
                     m.vcn += r.old_start - m.lcn;
                     m.length -= r.old_start - m.lcn;
                     m.lcn = r.new_start;
-                } else if (m.lcn > r.old_start && m.lcn + m.length > r.old_start + r.length) { // change beginning
-                    mappings.emplace(it, m.lcn - r.old_start + r.new_start, m.vcn, r.old_start + r.length - m.lcn);
 
-                    m.vcn += r.old_start + r.length - m.lcn;
-                    m.length -= r.old_start + r.length - m.lcn;
-                    m.lcn = r.old_start + r.length;
+                    if (r.length > m.length) {
+                        relocs.emplace_back(r.old_start + m.length, r.length - m.length, r.new_start + m.length);
+
+                        r.length = m.length;
+
+                        for (auto it2 = runs.begin(); it2 != runs.end(); it2++) {
+                            auto& r2 = *it2;
+
+                            if (r2.offset == r.old_start) {
+                                runs.emplace(it2, r2.offset, m.length, dummy_inode);
+
+                                r2.offset += m.length;
+                                r2.length -= m.length;
+
+                                break;
+                            }
+                        }
+                    }
+                } else if (m.lcn > r.old_start && m.lcn + m.length > r.old_start + r.length) { // change beginning
+                    auto orig_r = r;
+
+                    if (r.old_start < m.lcn) {
+                        for (auto it2 = runs.begin(); it2 != runs.end(); it2++) {
+                            auto& r2 = *it2;
+
+                            if (r2.offset == r.old_start) {
+                                runs.emplace(it2, r2.offset, m.lcn - r2.offset, dummy_inode);
+
+                                r2.length -= m.lcn - r2.offset;
+                                r2.offset = m.lcn;
+                            }
+
+                            if (r2.offset == r.new_start) {
+                                runs.emplace(it2, r2.offset, m.lcn - r.old_start, 0, 0, true);
+
+                                r2.offset += m.lcn - r.old_start;
+                                r2.length -= m.lcn - r.old_start;
+                            }
+                        }
+
+                        relocs.emplace_back(m.lcn, r.old_start + r.length - m.lcn, r.new_start + m.lcn - r.old_start);
+
+                        r.length = m.lcn - r.old_start;
+                    }
+
+                    mappings.emplace(it, m.lcn - orig_r.old_start + orig_r.new_start, m.vcn, orig_r.old_start + orig_r.length - m.lcn);
+
+                    m.vcn += orig_r.old_start + orig_r.length - m.lcn;
+                    m.length -= orig_r.old_start + orig_r.length - m.lcn;
+                    m.lcn = orig_r.old_start + orig_r.length;
                 }
             }
         }
