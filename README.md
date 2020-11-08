@@ -25,7 +25,7 @@ pagefile on it.
 
 On Linux, as root:
 
-`ntfs2btrfs.exe /dev/sda1`
+`ntfs2btrfs /dev/sda1`
 
 Installation
 ------------
@@ -35,6 +35,17 @@ download the latest Zip file.
 
 For Linux or other operating systems, you will need to compile it yourself - see
 below.
+
+Changelog
+---------
+
+* 20201108
+  * Improved error handling
+  * Added better message if NTFS is corrupted or unclean
+  * Better handling of relocations
+
+* 20200330
+  * Initial release
 
 Compilation
 -----------
@@ -69,6 +80,7 @@ What doesn't work
 * Unusual cluster sizes (i.e. not 4 KB)
 * Compressed files (skipped for now)
 * Encrypted files
+* "WofCompressedData" (see https://devblogs.microsoft.com/oldnewthing/20190618-00/?p=102597)
 
 Can I boot Windows from Btrfs with this?
 ----------------------------------------
