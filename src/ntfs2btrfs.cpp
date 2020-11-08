@@ -1398,8 +1398,30 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
 
             if (m.lcn + m.length > r.old_start && m.lcn < r.old_start + r.length) {
                 if (m.lcn >= r.old_start && m.lcn + m.length <= r.old_start + r.length) { // change whole mapping
-                    if (r.old_start < m.lcn) {
-                        fmt::print("FIXME - {:x} < {:x}\n", r.old_start, m.lcn);
+                    if (r.old_start < m.lcn) { // reloc starts before mapping
+                        for (auto it2 = runs.begin(); it2 != runs.end(); it2++) {
+                            auto& r2 = *it2;
+
+                            if (r2.offset == r.old_start) {
+                                runs.emplace(it2, r2.offset, m.lcn - r2.offset, dummy_inode);
+
+                                r2.length -= m.lcn - r2.offset;
+                                r2.offset = m.lcn;
+                            }
+
+                            if (r2.offset == r.new_start) {
+                                runs.emplace(it2, r2.offset, m.lcn - r.old_start, 0, 0, true);
+
+                                r2.offset += m.lcn - r.old_start;
+                                r2.length -= m.lcn - r.old_start;
+                            }
+                        }
+
+                        relocs.emplace_back(r.old_start, m.lcn - r.old_start, r.new_start);
+
+                        r.length -= m.lcn - r.old_start;
+                        r.new_start += m.lcn - r.old_start;
+                        r.old_start = m.lcn;
                     }
 
                     if (r.old_start + r.length > m.lcn + m.length) { // reloc goes beyond end of mapping
