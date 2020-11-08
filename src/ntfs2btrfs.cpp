@@ -1577,7 +1577,7 @@ static void clear_line() {
         SetConsoleCursorPosition(console, { 0, csbi.dwCursorPosition.Y });
     }
 #else
-    printf("\33[2K");
+    fmt::print(FMT_STRING("\33[2K"));
     fflush(stdout);
 #endif
 }
@@ -1647,7 +1647,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        fprintf(stderr, "Skipping encrypted inode %lx (%s)\n", inode - inode_offset, filename.c_str());
+                        fmt::print(stderr, FMT_STRING("Skipping encrypted inode {:x} ({})\n"), inode - inode_offset, filename);
                         return true;
                     }
 
@@ -1657,7 +1657,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        fprintf(stderr, "Skipping compressed inode %lx (%s)\n", inode - inode_offset, filename.c_str());
+                        fmt::print(stderr, FMT_STRING("Skipping compressed inode {:x} ({})\n"), inode - inode_offset, filename.c_str());
                         return true;
                     }
 
@@ -1686,7 +1686,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        fprintf(stderr, "Skipping encrypted ADS %s:%s\n", filename.c_str(), ads_name.c_str());
+                        fmt::print(stderr, FMT_STRING("Skipping encrypted ADS {}:{}\n"), filename, ads_name);
 
                         break;
                     }
@@ -1697,7 +1697,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        fprintf(stderr, "Skipping compressed ADS %s:%s\n", filename.c_str(), ads_name.c_str()); // FIXME
+                        fmt::print(stderr, FMT_STRING("Skipping compressed ADS {}:{}\n"), filename, ads_name); // FIXME
 
                         break;
                     }
@@ -1709,7 +1709,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             if (filename.empty())
                                 filename = f.get_filename();
 
-                            fprintf(stderr, "Skipping overly large ADS %s:%s (%u > %u)\n", filename.c_str(), ads_name.c_str(), att->Form.Resident.ValueLength, max_xattr_size);
+                            fmt::print(stderr, FMT_STRING("Skipping overly large ADS {}:{} ({} > {})\n"), filename.c_str(), ads_name.c_str(), att->Form.Resident.ValueLength, max_xattr_size);
 
                             break;
                         }
@@ -1726,13 +1726,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             if (filename.empty())
                                 filename = f.get_filename();
 
-                            fprintf(stderr, "Skipping overly large ADS %s:%s (%lu > %u)\n", filename.c_str(), ads_name.c_str(), att->Form.Nonresident.FileSize, max_xattr_size);
+                            fmt::print(stderr, FMT_STRING("Skipping overly large ADS {}:{} ({} > {})\n"), filename.c_str(), ads_name.c_str(), att->Form.Nonresident.FileSize, max_xattr_size);
 
                             break;
                         }
 
                         clear_line();
-                        fprintf(stderr, "FIXME - non-resident ADS %s:%s\n", filename.c_str(), ads_name.c_str());
+                        fmt::print(stderr, FMT_STRING("FIXME - non-resident ADS {}:{}\n"), filename.c_str(), ads_name.c_str());
                     }
                 }
             break;
@@ -1802,7 +1802,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             if (filename.empty())
                                 filename = f.get_filename();
 
-                            fprintf(stderr, "Reparse point buffer of %s was truncated.", filename.c_str());
+                            fmt::print(stderr, FMT_STRING("Reparse point buffer of {} was truncated."), filename);
                         } else {
                             symlink = convert.to_bytes(&rpb->SymbolicLinkReparseBuffer.PathBuffer[rpb->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(char16_t)],
                                                        &rpb->SymbolicLinkReparseBuffer.PathBuffer[(rpb->SymbolicLinkReparseBuffer.PrintNameOffset + rpb->SymbolicLinkReparseBuffer.PrintNameLength) / sizeof(char16_t)]);
@@ -1883,7 +1883,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             if (filename.empty())
                 filename = f.get_filename();
 
-            printf("Could not find SecurityId %u (%s)\n", si->SecurityId, filename.c_str());
+            fmt::print(stderr, FMT_STRING("Could not find SecurityId {} ({})\n"), si->SecurityId, filename);
         }
     }
 
@@ -2057,7 +2057,7 @@ static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_al
         }
 
         num++;
-        printf("Processing inode %lu / %lu (%1.1f%%)\r", num, total, (float)num * 100.0f / (float)total);
+        fmt::print(FMT_STRING("Processing inode {} / {} ({:1.1f}%)\r"), num, total, (float)num * 100.0f / (float)total);
         fflush(stdout);
 
         if (run.length == 1)
@@ -2068,7 +2068,7 @@ static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_al
         }
     }
 
-    printf("\n");
+    fmt::print(FMT_STRING("\n"));
 }
 
 static void create_data_extent_items(root& extent_root, const list<data_alloc>& runs, uint32_t cluster_size, uint64_t image_subvol_id,
@@ -2205,7 +2205,7 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
             num++;
 
             if (num % 1000 == 0 || num == total) {
-                printf("Calculating checksums %lu / %lu (%1.1f%%)\r", num, total, (float)num * 100.0f / (float)total);
+                fmt::print(FMT_STRING("Calculating checksums {} / {} ({:1.1f}%)\r"), num, total, (float)num * 100.0f / (float)total);
                 fflush(stdout);
             }
         }
@@ -2213,7 +2213,7 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
         add_item(csum_root, EXTENT_CSUM_ID, TYPE_EXTENT_CSUM, (r.offset * cluster_size) + chunk_virt_offset, &csums[0], r.length * cluster_size * sizeof(uint32_t) / sector_size);
     }
 
-    printf("\n");
+    fmt::print(FMT_STRING("\n"));
 }
 
 static void protect_data(ntfs& dev, list<data_alloc>& runs, uint64_t cluster_start, uint64_t cluster_end) {
@@ -2505,7 +2505,7 @@ static void convert(ntfs& dev) {
     create_data_extent_items(extent_root, runs, dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster,
                              image_subvol.id, image_inode);
 
-    printf("Updating directory sizes\n");
+    fmt::print(FMT_STRING("Updating directory sizes\n"));
 
     for (auto& r : roots) {
         if (!r.dir_size.empty())
@@ -2599,12 +2599,12 @@ int main(int argc, char* argv[]) {
 
     try {
         if (argc < 2 || (argc == 2 && (!strcmp(argv[1], "--help") || !strcmp(argv[1], "/?")))) {
-            printf("Usage: ntfs2btrfs device\n");
+            fmt::print(FMT_STRING("Usage: ntfs2btrfs device\n"));
             return 1;
         }
 
         if (argc == 2 && !strcmp(argv[1], "--version")) {
-            printf("ntfs2btrfs " PROJECT_VER "\n");
+            fmt::print(FMT_STRING("ntfs2btrfs " PROJECT_VER "\n"));
             return 1;
         }
 
