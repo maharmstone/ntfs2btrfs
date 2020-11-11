@@ -58,6 +58,9 @@ On Linux:
     cmake .
     make
 
+You'll also need [libfmt](https://github.com/fmtlib/fmt) installed - it should be
+in your package manager.
+
 What works
 ----------
 
