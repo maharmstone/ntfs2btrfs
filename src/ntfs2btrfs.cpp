@@ -1359,7 +1359,7 @@ static bool split_runs(list<data_alloc>& runs, uint64_t offset, uint64_t length,
 }
 
 static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& mappings, list<data_alloc>& runs) {
-    uint64_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+    uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
     uint64_t clusters_per_chunk = data_chunk_size / cluster_size;
     list<mapping> mappings2;
 
