@@ -107,7 +107,7 @@ static void space_list_remove(list<space>& space_list, uint64_t offset, uint64_t
 }
 
 static void create_data_chunks(ntfs& dev, const string& bmpdata) {
-    uint64_t clusters_per_chunk = data_chunk_size / (dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster);
+    uint64_t clusters_per_chunk = data_chunk_size / ((uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster);
     uint64_t addr = 0;
 
     // FIXME - make sure clusters_per_chunk is multiple of 8
