@@ -87,7 +87,7 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
         return;
 
     while (true) {
-        uint8_t v, l;
+        uint64_t v, l;
         int64_t v_val, l_val;
 
         current_vcn = next_vcn;
@@ -109,10 +109,10 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
         // FIXME - do we need to make sure that int64_t pointers don't go past end of buffer?
 
         v_val = *(int64_t*)stream;
-        v_val &= (1 << (v * 8)) - 1;
+        v_val &= (1ull << (v * 8)) - 1;
 
-        if ((uint64_t)v_val & (1 << ((v * 8) - 1))) // sign-extend if negative
-            v_val |= 0xffffffffffffffff & ~((1 << (v * 8)) - 1);
+        if ((uint64_t)v_val & (1ull << ((v * 8) - 1))) // sign-extend if negative
+            v_val |= 0xffffffffffffffff & ~((1ull << (v * 8)) - 1);
 
         stream += v;
 
@@ -120,10 +120,10 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
 
         if (l != 0) {
             l_val = *(int64_t*)stream;
-            l_val &= (1 << (l * 8)) - 1;
+            l_val &= (1ull << (l * 8)) - 1;
 
-            if ((uint64_t)l_val & (1 << ((l * 8) - 1))) // sign-extend if negative
-                l_val |= 0xffffffffffffffff & ~((1 << (l * 8)) - 1);
+            if ((uint64_t)l_val & (1ull << ((l * 8) - 1))) // sign-extend if negative
+                l_val |= 0xffffffffffffffff & ~((1ull << (l * 8)) - 1);
 
             stream += l;
 
