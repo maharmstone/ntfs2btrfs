@@ -1037,7 +1037,7 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
 
 static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint64_t inode) {
     INODE_ITEM ii;
-    uint64_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+    uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
 
     static const char filename[] = "ntfs.img";
 
