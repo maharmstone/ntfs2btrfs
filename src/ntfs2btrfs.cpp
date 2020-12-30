@@ -1715,11 +1715,11 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             break;
                         }
 
-                        auto name = xattr_prefix + ads_name;
+                        auto name2 = xattr_prefix + ads_name;
 
-                        uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name.data(), name.length());
+                        uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), name2.length());
 
-                        xattrs.emplace(name, make_pair(hash, res_data));
+                        xattrs.emplace(name2, make_pair(hash, res_data));
                     } else {
                         if (att->Form.Nonresident.FileSize > max_xattr_size) {
                             clear_line();
@@ -1751,7 +1751,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     if (att->Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]) + (fn->FileNameLength * sizeof(char16_t)))
                         throw formatted_error(FMT_STRING("FILE_NAME was truncated"));
 
-                    auto name = convert.to_bytes(fn->FileName, fn->FileName + fn->FileNameLength);
+                    auto name2 = convert.to_bytes(fn->FileName, fn->FileName + fn->FileNameLength);
 
                     uint64_t parent = fn->Parent.SegmentNumber;
 
@@ -1767,7 +1767,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         if (!skip) {
                             for (const auto& l : links) {
-                                if (get<0>(l) == parent && get<1>(l) == name) {
+                                if (get<0>(l) == parent && get<1>(l) == name2) {
                                     skip = true;
                                     break;
                                 }
@@ -1775,7 +1775,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         }
 
                         if (!skip)
-                            links.emplace_back(parent, name);
+                            links.emplace_back(parent, name2);
                     }
                 }
 
