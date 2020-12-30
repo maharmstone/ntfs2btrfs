@@ -326,9 +326,9 @@ ntfs::ntfs(const string& fn) {
         throw formatted_error(FMT_STRING("Device was not an NTFS volume."));
 
     if (boot_sector->ClustersPerMFTRecord < 0)
-        file_record_size = 1 << -boot_sector->ClustersPerMFTRecord;
+        file_record_size = 1ull << -boot_sector->ClustersPerMFTRecord;
     else
-        file_record_size = boot_sector->BytesPerSector * boot_sector->SectorsPerCluster * boot_sector->ClustersPerMFTRecord;
+        file_record_size = (uint64_t)boot_sector->BytesPerSector * (uint64_t)boot_sector->SectorsPerCluster * (uint64_t)boot_sector->ClustersPerMFTRecord;
 
     mft = new ntfs_file(*this, 0);
 
