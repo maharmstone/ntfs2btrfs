@@ -24,7 +24,11 @@
 #include <list>
 #include <string>
 #include <vector>
+
+#pragma warning(push)
+#pragma warning(disable : 26495 26451 26437 26812)
 #include <fmt/format.h>
+#pragma warning(pop)
 
 #ifdef _MSC_VER
 
