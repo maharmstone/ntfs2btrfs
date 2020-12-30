@@ -381,10 +381,9 @@ static uint64_t allocate_data(uint64_t length) {
 }
 
 void root::create_trees(root& extent_root) {
-    uint32_t space_left, num_items, data_off;
+    uint32_t space_left, num_items;
     string buf;
     tree_header* th;
-    leaf_node* ln;
 
     buf.resize(tree_size);
 
@@ -400,57 +399,59 @@ void root::create_trees(root& extent_root) {
     th->tree_id = id;
     th->level = 0;
 
-    ln = (leaf_node*)((uint8_t*)buf.data() + sizeof(tree_header));
-    data_off = tree_size - sizeof(tree_header);
+    {
+        auto ln = (leaf_node*)((uint8_t*)buf.data() + sizeof(tree_header));
+        uint32_t data_off = tree_size - sizeof(tree_header);
 
-    for (const auto& i : items) {
-        if (sizeof(leaf_node) + i.second.len > space_left) { // tree complete, add to list
-            if (!old_addresses.empty()) {
-                th->address = old_addresses.front();
-                old_addresses.pop_front();
-            } else {
-                th->address = allocate_metadata(id, extent_root, th->level);
-                allocations_done = true;
+        for (const auto& i : items) {
+            if (sizeof(leaf_node) + i.second.len > space_left) { // tree complete, add to list
+                if (!old_addresses.empty()) {
+                    th->address = old_addresses.front();
+                    old_addresses.pop_front();
+                } else {
+                    th->address = allocate_metadata(id, extent_root, th->level);
+                    allocations_done = true;
+                }
+
+                addresses.push_back(th->address);
+                th->num_items = num_items;
+
+                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum));
+
+                trees.push_back(buf);
+                metadata_size += tree_size;
+
+                memset(buf.data(), 0, tree_size);
+
+                th->fs_uuid = fs_uuid;
+                th->flags = HEADER_FLAG_MIXED_BACKREF | HEADER_FLAG_WRITTEN;
+                th->chunk_tree_uuid = chunk_uuid;
+                th->generation = 1;
+                th->tree_id = id;
+
+                space_left = data_off = tree_size - sizeof(tree_header);
+                num_items = 0;
+                ln = (leaf_node*)((uint8_t*)buf.data() + sizeof(tree_header));
             }
 
-            addresses.push_back(th->address);
-            th->num_items = num_items;
+            if (sizeof(leaf_node) + i.second.len + sizeof(tree_header) > tree_size)
+                throw formatted_error(FMT_STRING("Item too large for tree."));
 
-            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum));
+            ln->key = i.first;
+            ln->size = i.second.len;
 
-            trees.push_back(buf);
-            metadata_size += tree_size;
+            if (i.second.len != 0) {
+                data_off -= i.second.len;
+                memcpy((uint8_t*)buf.data() + sizeof(tree_header) + data_off, i.second.data, i.second.len);
+            }
 
-            memset(buf.data(), 0, tree_size);
+            ln->offset = data_off;
 
-            th->fs_uuid = fs_uuid;
-            th->flags = HEADER_FLAG_MIXED_BACKREF | HEADER_FLAG_WRITTEN;
-            th->chunk_tree_uuid = chunk_uuid;
-            th->generation = 1;
-            th->tree_id = id;
+            ln++;
 
-            space_left = data_off = tree_size - sizeof(tree_header);
-            num_items = 0;
-            ln = (leaf_node*)((uint8_t*)buf.data() + sizeof(tree_header));
+            num_items++;
+            space_left -= sizeof(leaf_node) + i.second.len;
         }
-
-        if (sizeof(leaf_node) + i.second.len + sizeof(tree_header) > tree_size)
-            throw formatted_error(FMT_STRING("Item too large for tree."));
-
-        ln->key = i.first;
-        ln->size = i.second.len;
-
-        if (i.second.len != 0) {
-            data_off -= i.second.len;
-            memcpy((uint8_t*)buf.data() + sizeof(tree_header) + data_off, i.second.data, i.second.len);
-        }
-
-        ln->offset = data_off;
-
-        ln++;
-
-        num_items++;
-        space_left -= sizeof(leaf_node) + i.second.len;
     }
 
     if (num_items > 0 || items.size() == 0) { // flush remaining tree
@@ -535,7 +536,7 @@ void root::create_trees(root& extent_root) {
                 th->tree_id = id;
                 th->level = level;
 
-                space_left = data_off = tree_size - sizeof(tree_header);
+                space_left = tree_size - sizeof(tree_header);
                 num_items = 0;
                 in = (internal_node*)((uint8_t*)buf.data() + sizeof(tree_header));
 
