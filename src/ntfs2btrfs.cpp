@@ -2404,7 +2404,7 @@ static void update_dir_sizes(root& r) {
 
 static void convert(ntfs& dev) {
     uint32_t sector_size = 0x1000; // FIXME
-    uint64_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+    uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
     list<data_alloc> runs;
 
     static const uint64_t image_inode = 0x101;
