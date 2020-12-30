@@ -43,7 +43,7 @@ set(CMAKE_ASM_MASM_COMPILE_OPTIONS_MSVC_RUNTIME_LIBRARY_MultiThreadedDebugDLL ""
 if(MSVC)
     target_compile_options(ntfs2btrfs PRIVATE /W4)
 else()
-    target_compile_options(ntfs2btrfs PRIVATE -Wall -Wextra -Wno-address-of-packed-member -Wconversion)
+    target_compile_options(ntfs2btrfs PRIVATE -Wall -Wextra -Wno-address-of-packed-member -Wconversion -Wno-unknown-pragmas)
 endif()
 
 install(TARGETS ntfs2btrfs DESTINATION bin)
