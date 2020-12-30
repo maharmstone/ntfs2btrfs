@@ -1106,9 +1106,9 @@ static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint6
 
     for (auto& it : r.items) {
         if (it.first.obj_id == SUBVOL_ROOT_INODE && it.first.obj_type == TYPE_INODE_ITEM) {
-            auto ii = (INODE_ITEM*)it.second.data;
+            auto ii2 = (INODE_ITEM*)it.second.data;
 
-            ii->st_size += (sizeof(filename) - 1) * 2;
+            ii2->st_size += (sizeof(filename) - 1) * 2;
             break;
         }
     }
