@@ -405,7 +405,7 @@ static bool btree_search(index_root* ir, const list<mapping>& mappings, index_no
                 if (ir->bytes_per_index_record < dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster)
                     vcn *= dev.boot_sector->BytesPerSector;
                 else
-                    vcn *= dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+                    vcn *= (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
 
                 auto data = read_from_mappings(mappings, vcn, ir->bytes_per_index_record, dev);
 
