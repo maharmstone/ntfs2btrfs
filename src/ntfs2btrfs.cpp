@@ -388,7 +388,7 @@ void root::create_trees(root& extent_root) {
     buf.resize(tree_size);
 
     memset(buf.data(), 0, tree_size);
-    space_left = tree_size - sizeof(tree_header);
+    space_left = tree_size - (uint32_t)sizeof(tree_header);
     num_items = 0;
 
     th = (tree_header*)buf.data();
@@ -401,7 +401,7 @@ void root::create_trees(root& extent_root) {
 
     {
         auto ln = (leaf_node*)((uint8_t*)buf.data() + sizeof(tree_header));
-        uint32_t data_off = tree_size - sizeof(tree_header);
+        uint32_t data_off = tree_size - (uint32_t)sizeof(tree_header);
 
         for (const auto& i : items) {
             if (sizeof(leaf_node) + i.second.len > space_left) { // tree complete, add to list
@@ -416,7 +416,7 @@ void root::create_trees(root& extent_root) {
                 addresses.push_back(th->address);
                 th->num_items = num_items;
 
-                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum));
+                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
 
                 trees.push_back(buf);
                 metadata_size += tree_size;
@@ -429,7 +429,7 @@ void root::create_trees(root& extent_root) {
                 th->generation = 1;
                 th->tree_id = id;
 
-                space_left = data_off = tree_size - sizeof(tree_header);
+                space_left = data_off = tree_size - (uint32_t)sizeof(tree_header);
                 num_items = 0;
                 ln = (leaf_node*)((uint8_t*)buf.data() + sizeof(tree_header));
             }
@@ -450,7 +450,7 @@ void root::create_trees(root& extent_root) {
             ln++;
 
             num_items++;
-            space_left -= sizeof(leaf_node) + i.second.len;
+            space_left -= (uint32_t)sizeof(leaf_node) + i.second.len;
         }
     }
 
@@ -466,7 +466,7 @@ void root::create_trees(root& extent_root) {
         addresses.push_back(th->address);
         th->num_items = num_items;
 
-        *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum));
+        *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
 
         trees.push_back(buf);
         metadata_size += tree_size;
@@ -497,7 +497,7 @@ void root::create_trees(root& extent_root) {
         th->level = level;
 
         num_items = 0;
-        space_left = tree_size - sizeof(tree_header);
+        space_left = tree_size - (uint32_t)sizeof(tree_header);
 
         auto in = (internal_node*)((uint8_t*)buf.data() + sizeof(tree_header));
 
@@ -522,7 +522,7 @@ void root::create_trees(root& extent_root) {
                 addresses.push_back(th->address);
                 th->num_items = num_items;
 
-                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum));
+                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
 
                 trees.push_back(buf);
                 metadata_size += tree_size;
@@ -536,7 +536,7 @@ void root::create_trees(root& extent_root) {
                 th->tree_id = id;
                 th->level = level;
 
-                space_left = tree_size - sizeof(tree_header);
+                space_left = tree_size - (uint32_t)sizeof(tree_header);
                 num_items = 0;
                 in = (internal_node*)((uint8_t*)buf.data() + sizeof(tree_header));
 
@@ -552,7 +552,7 @@ void root::create_trees(root& extent_root) {
             in++;
 
             num_items++;
-            space_left -= sizeof(internal_node);
+            space_left -= (uint32_t)sizeof(internal_node);
         }
 
         if (num_items > 0) { // flush remaining tree
@@ -567,7 +567,7 @@ void root::create_trees(root& extent_root) {
             addresses.push_back(th->address);
             th->num_items = num_items;
 
-            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum));
+            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
 
             trees.push_back(buf);
             metadata_size += tree_size;
@@ -815,7 +815,7 @@ static void update_root_root(root& root_root) {
         }
 
         if (changed)
-            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum));
+            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
     }
 }
 
@@ -863,7 +863,7 @@ static void update_extent_root(root& extent_root) {
         }
 
         if (changed)
-            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum));
+            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
     }
 }
 
@@ -885,7 +885,7 @@ static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t ind
             auto ir = (INODE_REF*)((uint8_t*)buf + old.len);
 
             ir->index = index;
-            ir->n = name.length();
+            ir->n = (uint16_t)name.length();
             memcpy(ir->name, name.data(), name.length());
         } catch (...) {
             free(buf);
@@ -893,7 +893,7 @@ static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t ind
         }
 
         old.data = buf;
-        old.len = irlen;
+        old.len = (uint16_t)irlen;
 
         return;
     }
@@ -906,10 +906,10 @@ static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t ind
 
     try {
         ir->index = index;
-        ir->n = name.length();
+        ir->n = (uint16_t)name.length();
         memcpy(ir->name, name.data(), name.length());
 
-        add_item(r, inode, TYPE_INODE_REF, parent, ir, irlen);
+        add_item(r, inode, TYPE_INODE_REF, parent, ir, (uint16_t)irlen);
     } catch (...) {
         free(ir);
         throw;
@@ -953,7 +953,7 @@ static void update_chunk_root(root& chunk_root) {
                     di->bytes_used += c.length;
                 }
 
-                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum));
+                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
 
                 return;
             }
@@ -983,8 +983,8 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
             rr->n = sizeof(subvol_name) - 1;
             memcpy(rr->name, subvol_name, sizeof(subvol_name) - 1);
 
-            add_item(root_root, BTRFS_ROOT_FSTREE, TYPE_ROOT_REF, image_subvol_id, rr, rrlen);
-            add_item(root_root, image_subvol_id, TYPE_ROOT_BACKREF, BTRFS_ROOT_FSTREE, rr, rrlen);
+            add_item(root_root, BTRFS_ROOT_FSTREE, TYPE_ROOT_REF, image_subvol_id, rr, (uint16_t)rrlen);
+            add_item(root_root, image_subvol_id, TYPE_ROOT_BACKREF, BTRFS_ROOT_FSTREE, rr, (uint16_t)rrlen);
         } catch (...) {
             free(rr);
             throw;
@@ -1015,8 +1015,8 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
 
             hash = calc_crc32c(0xfffffffe, (const uint8_t*)subvol_name, sizeof(subvol_name) - 1);
 
-            add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, di, dilen);
-            add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, di, dilen);
+            add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, di, (uint16_t)dilen);
+            add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, di, (uint16_t)dilen);
         } catch (...) {
             free(di);
             throw;
@@ -1088,8 +1088,8 @@ static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint6
 
             hash = calc_crc32c(0xfffffffe, (const uint8_t*)filename, sizeof(filename) - 1);
 
-            add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, di, dilen);
-            add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, di, dilen);
+            add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, di, (uint16_t)dilen);
+            add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, di, (uint16_t)dilen);
         } catch (...) {
             free(di);
             throw;
@@ -1152,7 +1152,7 @@ static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint6
 
                 ed2->offset = 0;
 
-                add_item(r, inode, TYPE_EXTENT_DATA, addr, ed, extlen);
+                add_item(r, inode, TYPE_EXTENT_DATA, addr, ed, (uint16_t)extlen);
 
                 data_size += ed2->size;
             }
@@ -1299,14 +1299,14 @@ static void link_inode(root& r, uint64_t inode, uint64_t dir, const string_view&
             di->key.offset = 0;
             di->transid = 1;
             di->m = 0;
-            di->n = name.length();
+            di->n = (uint16_t)name.length();
             di->type = type;
             memcpy(di->name, name.data(), name.length());
 
-            hash = calc_crc32c(0xfffffffe, (const uint8_t*)name.data(), name.length());
+            hash = calc_crc32c(0xfffffffe, (const uint8_t*)name.data(), (uint32_t)name.length());
 
-            add_item(r, dir, TYPE_DIR_ITEM, hash, di, dilen); // FIXME - handle hash collisions
-            add_item(r, dir, TYPE_DIR_INDEX, seq, di, dilen);
+            add_item(r, dir, TYPE_DIR_ITEM, hash, di, (uint16_t)dilen); // FIXME - handle hash collisions
+            add_item(r, dir, TYPE_DIR_INDEX, seq, di, (uint16_t)dilen);
         } catch (...) {
             free(di);
             throw;
@@ -1544,15 +1544,16 @@ static void set_xattr(root& r, uint64_t inode, const string_view& name, uint32_t
         throw bad_alloc();
 
     try {
-        di->key.obj_id = di->key.obj_type = di->key.offset = 0;
+        di->key.obj_id = di->key.offset = 0;
+        di->key.obj_type = 0;
         di->transid = 1;
-        di->m = data.size();
-        di->n = name.size();
+        di->m = (uint16_t)data.size();
+        di->n = (uint16_t)name.size();
         di->type = BTRFS_TYPE_EA;
         memcpy(di->name, name.data(), name.size());
         memcpy(di->name + name.size(), data.data(), data.size());
 
-        add_item(r, inode, TYPE_XATTR_ITEM, hash, di, offsetof(DIR_ITEM, name[0]) + name.size() + data.size());
+        add_item(r, inode, TYPE_XATTR_ITEM, hash, di, (uint16_t)(offsetof(DIR_ITEM, name[0]) + name.size() + data.size()));
     } catch (...) {
         free(di);
         throw;
@@ -1677,7 +1678,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     static const char xattr_prefix[] = "user.";
 
                     auto ads_name = convert.to_bytes(name.data(), name.data() + name.length());
-                    uint32_t max_xattr_size = tree_size - sizeof(tree_header) - sizeof(leaf_node) - offsetof(DIR_ITEM, name[0]) - ads_name.length() - (sizeof(xattr_prefix) - 1);
+                    auto max_xattr_size = (uint32_t)(tree_size - sizeof(tree_header) - sizeof(leaf_node) - offsetof(DIR_ITEM, name[0]) - ads_name.length() - (sizeof(xattr_prefix) - 1));
 
                     // FIXME - check xattr_name not reserved
 
@@ -1717,7 +1718,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         auto name2 = xattr_prefix + ads_name;
 
-                        uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), name2.length());
+                        uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), (uint32_t)name2.length());
 
                         xattrs.emplace(name2, make_pair(hash, res_data));
                     } else {
@@ -1903,7 +1904,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     if (!is_dir)
         ii.st_size = file_size;
 
-    ii.st_nlink = links.size();
+    ii.st_nlink = (uint32_t)links.size();
 
     if (is_dir)
         ii.st_mode = __S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
@@ -1942,7 +1943,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 ed2->address = (m.lcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster) + chunk_virt_offset;
                 ed2->offset = 0;
 
-                add_item(r, inode, TYPE_EXTENT_DATA, m.vcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster, ed, extlen);
+                add_item(r, inode, TYPE_EXTENT_DATA, m.vcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster, ed, (uint16_t)extlen);
             }
         } catch (...) {
             free(ed);
@@ -1967,7 +1968,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
         memcpy(ed->data, inline_data.data(), inline_data.length());
 
-        add_item(r, inode, TYPE_EXTENT_DATA, 0, ed, extlen);
+        add_item(r, inode, TYPE_EXTENT_DATA, 0, ed, (uint16_t)extlen);
 
         free(ed);
 
@@ -2006,7 +2007,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
         do {
             uint8_t c = atts % 16;
-            *val2 = c <= 9 ? (c + '0') : (c - 0xa + 'a');
+            *val2 = (char)(c <= 9 ? (c + '0') : (c - 0xa + 'a'));
 
             val2--;
             atts >>= 4;
@@ -2128,13 +2129,12 @@ static void create_data_extent_items(root& extent_root, const list<data_alloc>& 
 }
 
 static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
-    uint32_t max_run;
     uint32_t sector_size = 0x1000; // FIXME
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     list<space> runs2;
     uint64_t total = 0, num = 0;
 
-    max_run = (tree_size - sizeof(tree_header) - sizeof(leaf_node)) / sizeof(uint32_t);
+    auto max_run = (uint32_t)((tree_size - sizeof(tree_header) - sizeof(leaf_node)) / sizeof(uint32_t));
 
     // FIXME - these are clusters, when they should be sectors
 
@@ -2211,7 +2211,7 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
             }
         }
 
-        add_item(csum_root, EXTENT_CSUM_ID, TYPE_EXTENT_CSUM, (r.offset * cluster_size) + chunk_virt_offset, &csums[0], r.length * cluster_size * sizeof(uint32_t) / sector_size);
+        add_item(csum_root, EXTENT_CSUM_ID, TYPE_EXTENT_CSUM, (r.offset * cluster_size) + chunk_virt_offset, &csums[0], (uint16_t)(r.length * cluster_size * sizeof(uint32_t) / sector_size));
     }
 
     fmt::print(FMT_STRING("\n"));
@@ -2376,7 +2376,7 @@ static void populate_root_root(root& root_root) {
             di->type = BTRFS_TYPE_DIRECTORY;
             memcpy(di->name, default_subvol, sizeof(default_subvol) - 1);
 
-            add_item(root_root, BTRFS_ROOT_TREEDIR, TYPE_DIR_ITEM, default_hash, di, dilen);
+            add_item(root_root, BTRFS_ROOT_TREEDIR, TYPE_DIR_ITEM, default_hash, di, (uint16_t)dilen);
         } catch (...) {
             free(di);
             throw;

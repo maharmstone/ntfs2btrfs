@@ -25,8 +25,8 @@ using namespace std;
 
 map<uint32_t, string> sd_list;
 
-void process_fixups(MULTI_SECTOR_HEADER* header, unsigned int length, unsigned int sector_size) {
-    unsigned int sectors;
+void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size) {
+    uint64_t sectors;
     uint16_t* seq;
     uint8_t* ptr;
 
@@ -182,13 +182,13 @@ string ntfs_file::read_nonresident_attribute(size_t offset, size_t length, const
             read_end = read_start + buf_end - buf_start;
 
             if ((read_start % dev.boot_sector->BytesPerSector) != 0) {
-                skip_start = read_start % dev.boot_sector->BytesPerSector;
+                skip_start = (unsigned int)(read_start % dev.boot_sector->BytesPerSector);
                 read_start -= skip_start;
             } else
                 skip_start = 0;
 
             if ((read_end % dev.boot_sector->BytesPerSector) != 0) {
-                skip_end = dev.boot_sector->BytesPerSector - (read_end % dev.boot_sector->BytesPerSector);
+                skip_end = (unsigned int)(dev.boot_sector->BytesPerSector - (read_end % dev.boot_sector->BytesPerSector));
                 read_end += skip_end;
             } else
                 skip_end = 0;
@@ -762,7 +762,7 @@ void ntfs::read(char* buf, size_t length) {
 #ifdef _WIN32
     DWORD read;
 
-    if (!ReadFile(h, buf, length, &read, nullptr)) {
+    if (!ReadFile(h, buf, (DWORD)length, &read, nullptr)) {
         auto le = GetLastError();
 
         throw formatted_error(FMT_STRING("ReadFile failed (error {})."), le);
@@ -781,7 +781,7 @@ void ntfs::write(const char* buf, size_t length) {
 #ifdef _WIN32
     DWORD written;
 
-    if (!WriteFile(h, buf, length, &written, nullptr)) {
+    if (!WriteFile(h, buf, (DWORD)length, &written, nullptr)) {
         auto le = GetLastError();
 
         throw formatted_error(FMT_STRING("WriteFile failed (error {})."), le);
