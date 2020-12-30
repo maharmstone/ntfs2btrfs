@@ -1059,9 +1059,9 @@ static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint6
 //     BTRFS_TIME st_mtime;
 //     BTRFS_TIME otime;
 
-    for (const auto& r : runs) {
-        if (!r.relocated)
-            ii.st_blocks += r.length * cluster_size;
+    for (const auto& run : runs) {
+        if (!run.relocated)
+            ii.st_blocks += run.length * cluster_size;
     }
 
     add_item(r, inode, TYPE_INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
