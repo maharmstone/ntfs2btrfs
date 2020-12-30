@@ -66,6 +66,9 @@ static const uint64_t data_chunk_size = 128 * 1024 * 1024; // FIXME
 
 static const uint64_t inode_offset = 0x101;
 
+static const uint16_t max_inline = 2048;
+static const uint64_t max_extent_size = 0x8000000; // 128 MB
+
 #define EA_NTACL "security.NTACL"
 #define EA_NTACL_HASH 0x45922146
 
@@ -1062,7 +1065,7 @@ static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint6
 //     BTRFS_TIME otime;
 
     for (const auto& run : runs) {
-        if (!run.relocated)
+        if (!run.relocated && !run.not_in_img)
             ii.st_blocks += run.length * cluster_size;
     }
 
@@ -1135,7 +1138,7 @@ static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint6
             for (const auto& run : runs) {
                 uint64_t addr;
 
-                if (run.relocated)
+                if (run.relocated || run.not_in_img)
                     continue;
 
                 ed->decoded_size = ed2->size = ed2->num_bytes = run.length * cluster_size;
@@ -1654,6 +1657,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     string filename;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
 
+    static const uint32_t sector_size = 0x1000; // FIXME
+
     ntfs_file f(dev, ntfs_inode);
 
     if (f.file_record->BaseFileRecordSegment.SegmentNumber != 0)
@@ -1981,27 +1986,101 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
         free(ed);
     } else if (!inline_data.empty()) {
-        // FIXME - put this in proper extent if bigger than max_inline, or too big for tree
+        if (inline_data.length() > max_inline) {
+            size_t extlen = offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2);
+            auto ed = (EXTENT_DATA*)malloc(extlen);
+            if (!ed)
+                throw bad_alloc();
 
-        size_t extlen = offsetof(EXTENT_DATA, data[0]) + inline_data.length();
-        auto ed = (EXTENT_DATA*)malloc(extlen);
-        if (!ed)
-            throw bad_alloc();
+            auto ed2 = (EXTENT_DATA2*)&ed->data;
 
-        ed->generation = 1;
-        ed->decoded_size = inline_data.length();
-        ed->compression = 0;
-        ed->encryption = 0;
-        ed->encoding = 0;
-        ed->type = EXTENT_TYPE_INLINE;
+            ed->generation = 1;
+            ed->compression = 0; // FIXME - recompress?
+            ed->encryption = 0;
+            ed->encoding = 0;
+            ed->type = EXTENT_TYPE_REGULAR;
 
-        memcpy(ed->data, inline_data.data(), inline_data.length());
+            // round to nearest sector, and zero end
 
-        add_item(r, inode, TYPE_EXTENT_DATA, 0, ed, (uint16_t)extlen);
+            if (inline_data.length() & (sector_size - 1)) {
+                auto oldlen = inline_data.length();
 
-        free(ed);
+                inline_data.resize(sector_align(inline_data.length(), sector_size));
+                memset(inline_data.data() + oldlen, 0, inline_data.length() - oldlen);
+            }
 
-        ii.st_blocks = inline_data.length();
+            try {
+                uint64_t pos = 0;
+
+                while (!inline_data.empty()) {
+                    uint64_t len, lcn, cl;
+                    bool inserted = false;
+
+                    if (inline_data.length() >= max_extent_size)
+                        len = max_extent_size;
+                    else
+                        len = inline_data.length();
+
+                    ed->decoded_size = ed2->size = ed2->num_bytes = len;
+                    ii.st_blocks += ed->decoded_size;
+
+                    ed2->address = allocate_data(len);
+                    ed2->offset = 0;
+
+                    dev.seek(ed2->address - chunk_virt_offset);
+                    dev.write(inline_data.data(), len);
+
+                    add_item(r, inode, TYPE_EXTENT_DATA, pos, ed, (uint16_t)extlen);
+
+                    lcn = (ed2->address - chunk_virt_offset) / cluster_size;
+                    cl = len / cluster_size;
+
+                    for (auto it = runs.begin(); it != runs.end(); it++) {
+                        auto& r = *it;
+
+                        if (r.offset > lcn + cl) {
+                            runs.emplace(it, lcn, cl, inode, pos, false, true);
+                            inserted = true;
+                            break;
+                        }
+                    }
+
+                    if (!inserted)
+                        runs.emplace_back(lcn, cl, inode, pos, false, true);
+
+                    if (inline_data.length() > len) {
+                        pos += len;
+                        inline_data = inline_data.substr(len);
+                    } else
+                        break;
+                }
+            } catch (...) {
+                free(ed);
+                throw;
+            }
+
+            free(ed);
+        } else {
+            size_t extlen = offsetof(EXTENT_DATA, data[0]) + inline_data.length();
+            auto ed = (EXTENT_DATA*)malloc(extlen);
+            if (!ed)
+                throw bad_alloc();
+
+            ed->generation = 1;
+            ed->decoded_size = inline_data.length();
+            ed->compression = 0;
+            ed->encryption = 0;
+            ed->encoding = 0;
+            ed->type = EXTENT_TYPE_INLINE;
+
+            memcpy(ed->data, inline_data.data(), inline_data.length());
+
+            add_item(r, inode, TYPE_EXTENT_DATA, 0, ed, (uint16_t)extlen);
+
+            free(ed);
+
+            ii.st_blocks = inline_data.length();
+        }
     }
 
     add_item(r, inode, TYPE_INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
@@ -2134,6 +2213,20 @@ static void create_data_extent_items(root& extent_root, const list<data_alloc>& 
 
             add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
                      &di, sizeof(data_item));
+        } else if (r.not_in_img) {
+            data_item di;
+
+            di.extent_item.refcount = 1;
+            di.extent_item.generation = 1;
+            di.extent_item.flags = EXTENT_ITEM_DATA;
+            di.type = TYPE_EXTENT_DATA_REF;
+            di.edr.root = BTRFS_ROOT_FSTREE;
+            di.edr.objid = r.inode;
+            di.edr.count = 1;
+            di.edr.offset = r.file_offset * cluster_size;
+
+            add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
+                     &di, sizeof(data_item));
         } else {
             data_item2 di2;
 
@@ -2145,7 +2238,7 @@ static void create_data_extent_items(root& extent_root, const list<data_alloc>& 
             di2.edr1.objid = image_inode;
             di2.edr1.count = 1;
             di2.edr1.offset = img_addr;
-            di2.type2 = TYPE_EXTENT_DATA_REF;;
+            di2.type2 = TYPE_EXTENT_DATA_REF;
             di2.edr2.root = BTRFS_ROOT_FSTREE;
             di2.edr2.objid = r.inode;
             di2.edr2.count = 1;
@@ -2250,7 +2343,7 @@ static void protect_data(ntfs& dev, list<data_alloc>& runs, uint64_t cluster_sta
     if (split_runs(runs, cluster_start, cluster_end - cluster_start, dummy_inode, 0)) {
         string sb;
         uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-        uint64_t addr = allocate_data((cluster_end - cluster_start) * cluster_size);
+        uint64_t addr = allocate_data((cluster_end - cluster_start) * cluster_size) - chunk_virt_offset;
 
         if (cluster_end * cluster_size > orig_device_size)
             sb.resize(orig_device_size - (cluster_start * cluster_size));

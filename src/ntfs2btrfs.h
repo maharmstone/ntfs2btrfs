@@ -75,14 +75,15 @@ struct chunk {
 };
 
 struct data_alloc {
-    data_alloc(uint64_t offset, uint64_t length, uint64_t inode = 0, uint64_t file_offset = 0, bool relocated = false) :
-    offset(offset), length(length), inode(inode), file_offset(file_offset), relocated(relocated) { }
+    data_alloc(uint64_t offset, uint64_t length, uint64_t inode = 0, uint64_t file_offset = 0, bool relocated = false, bool not_in_img = false) :
+    offset(offset), length(length), inode(inode), file_offset(file_offset), relocated(relocated), not_in_img(not_in_img) { }
 
     uint64_t offset;
     uint64_t length;
     uint64_t inode;
     uint64_t file_offset;
     bool relocated;
+    bool not_in_img;
 };
 
 struct tree_item {
