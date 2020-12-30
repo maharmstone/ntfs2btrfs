@@ -1307,7 +1307,34 @@ static void link_inode(root& r, uint64_t inode, uint64_t dir, const string_view&
 
             hash = calc_crc32c(0xfffffffe, (const uint8_t*)name.data(), (uint32_t)name.length());
 
-            add_item(r, dir, TYPE_DIR_ITEM, hash, di, (uint16_t)dilen); // FIXME - handle hash collisions
+            if (r.items.count(KEY{dir, TYPE_DIR_ITEM, hash}) == 0)
+                add_item(r, dir, TYPE_DIR_ITEM, hash, di, (uint16_t)dilen);
+            else { // hash collision
+                auto& ent = r.items.at(KEY{dir, TYPE_DIR_ITEM, hash});
+
+                if (ent.len != 0) {
+                    void* data = malloc(ent.len + dilen);
+
+                    if (!data)
+                        throw bad_alloc();
+
+                    memcpy(data, ent.data, ent.len);
+                    memcpy((uint8_t*)data + ent.len, di, dilen);
+
+                    free(ent.data);
+
+                    ent.data = data;
+                    ent.len += (uint32_t)dilen;
+                } else {
+                    ent.data = malloc(dilen);
+                    if (!ent.data)
+                        throw bad_alloc();
+
+                    ent.len = (uint32_t)dilen;
+                    memcpy(ent.data, di, dilen);
+                }
+            }
+
             add_item(r, dir, TYPE_DIR_INDEX, seq, di, (uint16_t)dilen);
         } catch (...) {
             free(di);
