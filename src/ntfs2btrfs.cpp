@@ -2417,7 +2417,7 @@ static void convert(ntfs& dev) {
     {
         default_random_engine generator;
 
-        generator.seed(chrono::high_resolution_clock::now().time_since_epoch().count());
+        generator.seed((unsigned int)chrono::high_resolution_clock::now().time_since_epoch().count());
 
         fs_uuid = generate_uuid(generator);
         chunk_uuid = generate_uuid(generator);
