@@ -1687,21 +1687,24 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         return true;
                     }
 
-                    if (att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK) {
-                        clear_line();
-
-                        if (filename.empty())
-                            filename = f.get_filename();
-
-                        fmt::print(stderr, FMT_STRING("Skipping compressed inode {:x} ({})\n"), inode - inode_offset, filename.c_str());
-                        return true;
-                    }
 
                     if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
                         file_size = att->Form.Resident.ValueLength;
 
                         inline_data = res_data;
+
+                        // ATTRIBUTE_FLAG_COMPRESSION_MASK can be set in flags, but doesn't seem to do anything
                     } else {
+                        if (att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK) {
+                            clear_line();
+
+                            if (filename.empty())
+                                filename = f.get_filename();
+
+                            fmt::print(stderr, FMT_STRING("Skipping compressed inode {:x} ({})\n"), inode - inode_offset, filename.c_str());
+                            return true;
+                        }
+
                         file_size = att->Form.Nonresident.FileSize;
 
                         // FIXME - if ValidDataLength < FileSize, will need to zero end
