@@ -563,60 +563,62 @@ void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEA
     if (!attlist.empty()) {
         vector<uint64_t> other_inodes;
 
-        auto ent = (const attribute_list_entry*)attlist.data();
-        size_t left = attlist.length();
+        {
+            auto ent = (const attribute_list_entry*)attlist.data();
+            size_t left = attlist.length();
 
-        while (true) {
-            uint64_t file_reference = ent->file_reference.SegmentNumber;
+            while (true) {
+                uint64_t file_reference = ent->file_reference.SegmentNumber;
 
-            if (file_reference == inode) { // contained elsewhere in this inode
-                att = reinterpret_cast<const ATTRIBUTE_RECORD_HEADER*>((uint8_t*)file_record + file_record->FirstAttributeOffset);
-                offset = file_record->FirstAttributeOffset;
+                if (file_reference == inode) { // contained elsewhere in this inode
+                    att = reinterpret_cast<const ATTRIBUTE_RECORD_HEADER*>((uint8_t*)file_record + file_record->FirstAttributeOffset);
+                    offset = file_record->FirstAttributeOffset;
 
-                while (true) {
-                    if (att->TypeCode == (enum ntfs_attribute)0xffffffff || att->RecordLength == 0)
-                        break;
+                    while (true) {
+                        if (att->TypeCode == (enum ntfs_attribute)0xffffffff || att->RecordLength == 0)
+                            break;
 
-                    if (att->TypeCode == ent->type && att->NameLength == ent->name_length && att->Instance == ent->instance) {
-                        if (att->NameLength == 0 || !memcmp((uint8_t*)file_record + offset + att->NameOffset, (uint8_t*)ent + ent->name_offset, att->NameLength * sizeof(char16_t))) {
-                            string_view data;
-                            u16string_view name;
+                        if (att->TypeCode == ent->type && att->NameLength == ent->name_length && att->Instance == ent->instance) {
+                            if (att->NameLength == 0 || !memcmp((uint8_t*)file_record + offset + att->NameOffset, (uint8_t*)ent + ent->name_offset, att->NameLength * sizeof(char16_t))) {
+                                string_view data;
+                                u16string_view name;
 
-                            if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM)
-                                data = string_view((const char*)file_record + offset + att->Form.Resident.ValueOffset, att->Form.Resident.ValueLength);
+                                if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM)
+                                    data = string_view((const char*)file_record + offset + att->Form.Resident.ValueOffset, att->Form.Resident.ValueLength);
 
-                            if (att->NameLength != 0)
-                                name = u16string_view((char16_t*)((uint8_t*)file_record + offset + att->NameOffset), att->NameLength);
+                                if (att->NameLength != 0)
+                                    name = u16string_view((char16_t*)((uint8_t*)file_record + offset + att->NameOffset), att->NameLength);
 
-                            if (!func(att, data, name))
-                                return;
+                                if (!func(att, data, name))
+                                    return;
 
+                                break;
+                            }
+                        }
+
+                        offset += att->RecordLength;
+                        att = reinterpret_cast<const ATTRIBUTE_RECORD_HEADER*>((uint8_t*)att + att->RecordLength);
+                    }
+                } else {
+                    bool found = false;
+
+                    for (auto n : other_inodes) {
+                        if (n == file_reference) {
+                            found = true;
                             break;
                         }
                     }
 
-                    offset += att->RecordLength;
-                    att = reinterpret_cast<const ATTRIBUTE_RECORD_HEADER*>((uint8_t*)att + att->RecordLength);
-                }
-            } else {
-                bool found = false;
-
-                for (auto n : other_inodes) {
-                    if (n == file_reference) {
-                        found = true;
-                        break;
-                    }
+                    if (!found)
+                        other_inodes.push_back(file_reference);
                 }
 
-                if (!found)
-                    other_inodes.push_back(file_reference);
+                if (left <= ent->record_length)
+                    break;
+
+                left -= ent->record_length;
+                ent = (const attribute_list_entry*)((uint8_t*)ent + ent->record_length);
             }
-
-            if (left <= ent->record_length)
-                break;
-
-            left -= ent->record_length;
-            ent = (const attribute_list_entry*)((uint8_t*)ent + ent->record_length);
         }
 
         if (!other_inodes.empty()) {
