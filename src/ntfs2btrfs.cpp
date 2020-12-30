@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public Licence
  * along with Ntfs2btrfs. If not, see <https://www.gnu.org/licenses/>. */
 
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+
 #include "ntfs.h"
 #include "ntfs2btrfs.h"
 #include "crc32c.h"
