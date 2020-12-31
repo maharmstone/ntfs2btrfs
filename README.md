@@ -33,7 +33,11 @@ Installation
 On Windows, go to the [Releases page](https://github.com/maharmstone/ntfs2btrfs/releases) and
 download the latest Zip file.
 
-For Linux or other operating systems, you will need to compile it yourself - see
+For Linux:
+* [Arch](https://aur.archlinux.org/packages/ntfs2btrfs-git) (thanks to [nicman23](https://github.com/nicman23))
+* [Gentoo ebuild](https://raw.githubusercontent.com/maharmstone/ntfs2btrfs/master/ntfs2btrfs-20201108.ebuild)
+
+For other distributions or operating systems, you will need to compile it yourself - see
 below.
 
 Changelog
