@@ -1687,7 +1687,6 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         return true;
                     }
 
-
                     if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
                         file_size = att->Form.Resident.ValueLength;
 
@@ -1695,21 +1694,28 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         // ATTRIBUTE_FLAG_COMPRESSION_MASK can be set in flags, but doesn't seem to do anything
                     } else {
-                        if (att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK) {
-                            clear_line();
-
-                            if (filename.empty())
-                                filename = f.get_filename();
-
-                            fmt::print(stderr, FMT_STRING("Skipping compressed inode {:x} ({})\n"), inode - inode_offset, filename.c_str());
-                            return true;
-                        }
-
                         file_size = att->Form.Nonresident.FileSize;
 
-                        // FIXME - if ValidDataLength < FileSize, will need to zero end
+                        if (att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK) {
+                            list<mapping> comp_mappings;
+                            string compdata;
 
-                        read_nonresident_mappings(att, mappings, cluster_size);
+                            read_nonresident_mappings(att, comp_mappings, cluster_size);
+
+                            compdata.resize(att->Form.Nonresident.TotalAllocated);
+                            memset(compdata.data(), 0, compdata.length());
+
+                            for (const auto& m : comp_mappings) {
+                                dev.seek(m.lcn * cluster_size);
+                                dev.read(compdata.data() + (m.vcn * cluster_size), m.length * cluster_size);
+                            }
+
+                            inline_data = lznt1_decompress(compdata, file_size);
+                        } else {
+                            // FIXME - if ValidDataLength < FileSize, will need to zero end
+
+                            read_nonresident_mappings(att, mappings, cluster_size);
+                        }
                     }
                 } else { // ADS
                     static const char xattr_prefix[] = "user.";

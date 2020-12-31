@@ -16,6 +16,7 @@ find_package(fmt REQUIRED)
 
 set(SRC_FILES src/ntfs2btrfs.cpp
     src/ntfs.cpp
+    src/decomp.cpp
     src/crc32c.c)
 
 if(MSVC)
