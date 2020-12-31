@@ -1741,6 +1741,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         break;
                     }
 
+                    auto name2 = xattr_prefix + ads_name;
+
+                    uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), (uint32_t)name2.length());
+
                     if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
                         if (att->Form.Resident.ValueLength > max_xattr_size) {
                             clear_line();
@@ -1752,10 +1756,6 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                             break;
                         }
-
-                        auto name2 = xattr_prefix + ads_name;
-
-                        uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), (uint32_t)name2.length());
 
                         xattrs.emplace(name2, make_pair(hash, res_data));
                     } else {
@@ -1770,8 +1770,22 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             break;
                         }
 
-                        clear_line();
-                        fmt::print(stderr, FMT_STRING("FIXME - non-resident ADS {}:{}\n"), filename.c_str(), ads_name.c_str());
+                        list<mapping> ads_mappings;
+                        string ads_data;
+
+                        read_nonresident_mappings(att, ads_mappings, cluster_size);
+
+                        ads_data.resize(sector_align(att->Form.Nonresident.FileSize, cluster_size));
+                        memset(ads_data.data(), 0, ads_data.length());
+
+                        for (const auto& m : ads_mappings) {
+                            dev.seek(m.lcn * cluster_size);
+                            dev.read(ads_data.data() + (m.vcn * cluster_size), m.length * cluster_size);
+                        }
+
+                        ads_data.resize(att->Form.Nonresident.FileSize);
+
+                        xattrs.emplace(name2, make_pair(hash, ads_data));
                     }
                 }
             break;
