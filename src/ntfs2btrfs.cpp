@@ -1710,7 +1710,14 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                 dev.read(compdata.data() + (m.vcn * cluster_size), m.length * cluster_size);
                             }
 
-                            inline_data = lznt1_decompress(compdata, file_size);
+                            try {
+                                inline_data = lznt1_decompress(compdata, file_size);
+                            } catch (const exception& e) {
+                                if (filename.empty())
+                                    filename = f.get_filename();
+
+                                throw formatted_error(FMT_STRING("{}: {}"), filename, e.what());
+                            }
                         } else {
                             // FIXME - if ValidDataLength < FileSize, will need to zero end
 
