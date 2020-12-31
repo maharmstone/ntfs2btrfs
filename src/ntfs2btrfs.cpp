@@ -1654,7 +1654,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     uint32_t atts;
     bool atts_set = false;
     map<string, tuple<uint32_t, string>> xattrs;
-    string filename;
+    string filename, wof_compressed_data;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
 
     static const uint32_t sector_size = 0x1000; // FIXME
@@ -1759,20 +1759,24 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), (uint32_t)name2.length());
 
                     if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
-                        if (att->Form.Resident.ValueLength > max_xattr_size) {
-                            clear_line();
+                        if (ads_name == "WofCompressedData")
+                            wof_compressed_data = res_data;
+                        else {
+                            if (att->Form.Resident.ValueLength > max_xattr_size) {
+                                clear_line();
 
-                            if (filename.empty())
-                                filename = f.get_filename();
+                                if (filename.empty())
+                                    filename = f.get_filename();
 
-                            fmt::print(stderr, FMT_STRING("Skipping overly large ADS {}:{} ({} > {})\n"), filename.c_str(), ads_name.c_str(), att->Form.Resident.ValueLength, max_xattr_size);
+                                fmt::print(stderr, FMT_STRING("Skipping overly large ADS {}:{} ({} > {})\n"), filename.c_str(), ads_name.c_str(), att->Form.Resident.ValueLength, max_xattr_size);
 
-                            break;
+                                break;
+                            }
+
+                            xattrs.emplace(name2, make_pair(hash, res_data));
                         }
-
-                        xattrs.emplace(name2, make_pair(hash, res_data));
                     } else {
-                        if (att->Form.Nonresident.FileSize > max_xattr_size) {
+                        if (att->Form.Nonresident.FileSize > max_xattr_size && ads_name != "WofCompressedData") {
                             clear_line();
 
                             if (filename.empty())
@@ -1798,7 +1802,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         ads_data.resize(att->Form.Nonresident.FileSize);
 
-                        xattrs.emplace(name2, make_pair(hash, ads_data));
+                        if (ads_name == "WofCompressedData")
+                            wof_compressed_data = ads_data;
+                        else
+                            xattrs.emplace(name2, make_pair(hash, ads_data));
                     }
                 }
             break;
@@ -1950,6 +1957,71 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 filename = f.get_filename();
 
             fmt::print(stderr, FMT_STRING("Could not find SecurityId {} ({})\n"), si->SecurityId, filename);
+        }
+    }
+
+    if (reparse_point.length() > sizeof(uint32_t) && *(uint32_t*)reparse_point.data() == IO_REPARSE_TAG_WOF) {
+        try {
+            if (reparse_point.length() < offsetof(reparse_point_header, DataBuffer)) {
+                throw formatted_error(FMT_STRING("IO_REPARSE_TAG_WOF reparse point buffer was {} bytes, expected at least {}."),
+                                      reparse_point.length(), offsetof(reparse_point_header, DataBuffer));
+            }
+
+            auto rph = (reparse_point_header*)reparse_point.data();
+
+            if (reparse_point.length() < offsetof(reparse_point_header, DataBuffer) + rph->ReparseDataLength) {
+                throw formatted_error(FMT_STRING("IO_REPARSE_TAG_WOF reparse point buffer was {} bytes, expected {}."),
+                                      reparse_point.length(), offsetof(reparse_point_header, DataBuffer) + rph->ReparseDataLength);
+            }
+
+            if (rph->ReparseDataLength < sizeof(WOF_EXTERNAL_INFO)) {
+                throw formatted_error(FMT_STRING("rph->ReparseDataLength was {} bytes, expected at least {}."),
+                                      rph->ReparseDataLength, sizeof(WOF_EXTERNAL_INFO));
+            }
+
+            auto wofei = (WOF_EXTERNAL_INFO*)rph->DataBuffer;
+
+            if (wofei->Version != WOF_CURRENT_VERSION)
+                throw formatted_error(FMT_STRING("Unsupported WOF version {}."), wofei->Version);
+
+            if (wofei->Provider == WOF_PROVIDER_WIM)
+                throw formatted_error(FMT_STRING("Unsupported WOF provider WOF_PROVIDER_WIM."));
+            else if (wofei->Provider != WOF_PROVIDER_FILE)
+                throw formatted_error(FMT_STRING("Unsupported WOF provider {}."), wofei->Provider);
+
+            if (rph->ReparseDataLength < sizeof(WOF_EXTERNAL_INFO) + sizeof(FILE_PROVIDER_EXTERNAL_INFO_V0)) {
+                throw formatted_error(FMT_STRING("rph->ReparseDataLength was {} bytes, expected {}."),
+                                      rph->ReparseDataLength, sizeof(WOF_EXTERNAL_INFO) + sizeof(FILE_PROVIDER_EXTERNAL_INFO_V0));
+            }
+
+            auto fpei = (FILE_PROVIDER_EXTERNAL_INFO_V0*)&wofei[1];
+
+            if (fpei->Version != FILE_PROVIDER_CURRENT_VERSION) {
+                throw formatted_error(FMT_STRING("rph->FILE_PROVIDER_EXTERNAL_INFO_V0 Version was {}, expected {}."),
+                                      fpei->Version, FILE_PROVIDER_CURRENT_VERSION);
+            }
+
+            switch (fpei->Algorithm) {
+                case FILE_PROVIDER_COMPRESSION_XPRESS4K:
+                    throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS4K WofCompressedData"));
+
+                case FILE_PROVIDER_COMPRESSION_LZX:
+                    throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_LZX WofCompressedData"));
+
+                case FILE_PROVIDER_COMPRESSION_XPRESS8K:
+                    throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS8K WofCompressedData"));
+
+                case FILE_PROVIDER_COMPRESSION_XPRESS16K:
+                    throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS16K WofCompressedData"));
+
+                default:
+                    throw formatted_error(FMT_STRING("Unrecognized WOF compression algorithm {}"), fpei->Algorithm);
+            }
+        } catch (const exception& e) {
+            if (filename.empty())
+                filename = f.get_filename();
+
+            fmt::print(stderr, FMT_STRING("{}: {}\n"), filename, e.what());
         }
     }
 

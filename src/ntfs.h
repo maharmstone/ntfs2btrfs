@@ -298,6 +298,7 @@ typedef struct {
 #endif
 
 #define IO_REPARSE_TAG_LX_SYMLINK   0xa000001d
+#define IO_REPARSE_TAG_WOF          0x80000017
 
 #ifndef SYMLINK_FLAG_RELATIVE
 #define SYMLINK_FLAG_RELATIVE       0x00000001
@@ -332,6 +333,35 @@ typedef struct {
     MFT_SEGMENT_REFERENCE file_reference;
     uint16_t instance;
 } attribute_list_entry;
+
+#define WOF_CURRENT_VERSION         1
+
+#define WOF_PROVIDER_WIM            1
+#define WOF_PROVIDER_FILE           2
+
+typedef struct {
+    uint32_t ReparseTag;
+    uint16_t ReparseDataLength;
+    uint16_t Reserved;
+    uint8_t DataBuffer[1];
+} reparse_point_header; // edited form of REPARSE_DATA_BUFFER
+
+typedef struct {
+    uint32_t Version;
+    uint32_t Provider;
+} WOF_EXTERNAL_INFO;
+
+#define FILE_PROVIDER_CURRENT_VERSION           1
+
+#define FILE_PROVIDER_COMPRESSION_XPRESS4K          0
+#define FILE_PROVIDER_COMPRESSION_LZX               1
+#define FILE_PROVIDER_COMPRESSION_XPRESS8K          2
+#define FILE_PROVIDER_COMPRESSION_XPRESS16K         3
+
+typedef struct {
+    uint32_t Version;
+    uint32_t Algorithm;
+} FILE_PROVIDER_EXTERNAL_INFO_V0;
 
 #pragma pack(pop)
 
