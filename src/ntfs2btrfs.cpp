@@ -1699,6 +1699,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             file_size = att->Form.Nonresident.FileSize;
                             compression_unit = att->Form.Nonresident.CompressionUnit;
                             vdl = att->Form.Nonresident.ValidDataLength;
+
+                            if (!(att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK))
+                                compression_unit = 0;
                         }
 
                         if (compression_unit != 0) {
