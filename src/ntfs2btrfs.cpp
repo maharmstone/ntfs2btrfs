@@ -1691,27 +1691,69 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         file_size = att->Form.Resident.ValueLength;
 
                         inline_data = res_data;
-
-                        // ATTRIBUTE_FLAG_COMPRESSION_MASK can be set in flags, but doesn't seem to do anything
                     } else {
-                        file_size = att->Form.Nonresident.FileSize;
+                        if (file_size == 0)
+                            file_size = att->Form.Nonresident.FileSize;
 
-                        if (att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK) {
+                        if (att->Form.Nonresident.CompressionUnit != 0) {
                             list<mapping> comp_mappings;
                             string compdata;
+                            uint64_t cus = 1 << att->Form.Nonresident.CompressionUnit;
 
                             read_nonresident_mappings(att, comp_mappings, cluster_size);
 
-                            compdata.resize(att->Form.Nonresident.TotalAllocated);
-                            memset(compdata.data(), 0, compdata.length());
-
-                            for (const auto& m : comp_mappings) {
-                                dev.seek(m.lcn * cluster_size);
-                                dev.read(compdata.data() + (m.vcn * cluster_size), m.length * cluster_size);
-                            }
+                            compdata.resize(cus * cluster_size);
 
                             try {
-                                inline_data = lznt1_decompress(compdata, file_size);
+                                uint64_t vcn = att->Form.Nonresident.LowestVcn;
+
+                                while (true) {
+                                    uint64_t clusters = 0;
+
+                                    while (clusters < cus) {
+                                        if (comp_mappings.empty()) {
+                                            memset(compdata.data() + (clusters * cluster_size), 0, (cus - clusters) * cluster_size);
+                                            break;
+                                        }
+
+                                        auto& m = comp_mappings.front();
+                                        auto l = min(m.length, cus - clusters);
+
+                                        if (m.lcn == 0) {
+                                            memset(compdata.data() + (clusters * cluster_size), 0, l * cluster_size);
+
+                                            if (l < m.length) {
+                                                m.vcn += l;
+                                                m.length -= l;
+                                            } else
+                                                comp_mappings.pop_front();
+                                        } else {
+                                            dev.seek(m.lcn * cluster_size);
+                                            dev.read(compdata.data() + (clusters * cluster_size), l * cluster_size);
+
+                                            if (l < m.length) {
+                                                m.lcn += l;
+                                                m.vcn += l;
+                                                m.length -= l;
+                                            } else
+                                                comp_mappings.pop_front();
+                                        }
+
+                                        clusters += l;
+                                    }
+
+                                    inline_data += lznt1_decompress(compdata, compdata.length());
+
+                                    if (inline_data.length() >= file_size) {
+                                        inline_data.resize(file_size);
+                                        break;
+                                    }
+
+                                    vcn += cus;
+
+                                    if (vcn >= att->Form.Nonresident.HighestVcn)
+                                        break;
+                                }
                             } catch (const exception& e) {
                                 if (filename.empty())
                                     filename = f.get_filename();

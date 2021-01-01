@@ -104,7 +104,8 @@ typedef struct {
             uint64_t LowestVcn;
             uint64_t HighestVcn;
             uint16_t MappingPairsOffset;
-            uint8_t Reserved[6];
+            uint16_t CompressionUnit;
+            uint32_t Padding;
             uint64_t AllocatedLength;
             uint64_t FileSize;
             uint64_t ValidDataLength;
