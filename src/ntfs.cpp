@@ -94,11 +94,11 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
 
         current_vcn = next_vcn;
 
+        if (*stream == 0)
+            break;
+
         v = *stream & 0xf;
         l = *stream >> 4;
-
-        if (l == 0)
-            break;
 
         stream++;
 
@@ -135,10 +135,11 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
                 next_vcn = max_cluster;
 
             mappings.emplace_back(current_lcn, current_vcn, next_vcn - current_vcn);
+        } else
+            mappings.emplace_back(0, current_vcn, next_vcn - current_vcn);
 
-            if (next_vcn == max_cluster)
-                break;
-        }
+        if (next_vcn == max_cluster)
+            break;
     }
 }
 
