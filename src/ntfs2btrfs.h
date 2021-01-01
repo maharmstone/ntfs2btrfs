@@ -253,7 +253,7 @@ static inline uint64_t sector_align(uint64_t v, uint64_t s) {
 
 // ntfs.cpp
 void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, std::list<mapping>& mappings,
-                               uint32_t cluster_size);
+                               uint32_t cluster_size, uint64_t vdl);
 std::string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev);
 void populate_skip_list(ntfs& dev, uint64_t inode, std::list<uint64_t>& skiplist);
 void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size);

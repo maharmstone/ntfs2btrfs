@@ -1656,6 +1656,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     map<string, tuple<uint32_t, string>> xattrs;
     string filename, wof_compressed_data;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+    bool processed_data = false;
+    uint16_t compression_unit;
+    uint64_t vdl;
 
     static const uint32_t sector_size = 0x1000; // FIXME
 
@@ -1687,20 +1690,23 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         return true;
                     }
 
-                    if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
+                    if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM && !processed_data) {
                         file_size = att->Form.Resident.ValueLength;
 
                         inline_data = res_data;
                     } else {
-                        if (file_size == 0)
+                        if (!processed_data) {
                             file_size = att->Form.Nonresident.FileSize;
+                            compression_unit = att->Form.Nonresident.CompressionUnit;
+                            vdl = att->Form.Nonresident.ValidDataLength;
+                        }
 
-                        if (att->Form.Nonresident.CompressionUnit != 0) {
+                        if (compression_unit != 0) {
                             list<mapping> comp_mappings;
                             string compdata;
-                            uint64_t cus = 1 << att->Form.Nonresident.CompressionUnit;
+                            uint64_t cus = 1 << compression_unit;
 
-                            read_nonresident_mappings(att, comp_mappings, cluster_size);
+                            read_nonresident_mappings(att, comp_mappings, cluster_size, vdl);
 
                             compdata.resize(cus * cluster_size);
 
@@ -1763,9 +1769,11 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         } else {
                             // FIXME - if ValidDataLength < FileSize, will need to zero end
 
-                            read_nonresident_mappings(att, mappings, cluster_size);
+                            read_nonresident_mappings(att, mappings, cluster_size, vdl);
                         }
                     }
+
+                    processed_data = true;
                 } else { // ADS
                     static const char xattr_prefix[] = "user.";
 
@@ -1832,7 +1840,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         list<mapping> ads_mappings;
                         string ads_data;
 
-                        read_nonresident_mappings(att, ads_mappings, cluster_size);
+                        read_nonresident_mappings(att, ads_mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
 
                         ads_data.resize(sector_align(att->Form.Nonresident.FileSize, cluster_size));
                         memset(ads_data.data(), 0, ads_data.length());
