@@ -1399,6 +1399,9 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
     // avoid chunk boundaries
 
     for (const auto& m : mappings) {
+        if (m.lcn == 0) // sparse
+            continue;
+
         uint64_t chunk_start = m.lcn / clusters_per_chunk;
         uint64_t chunk_end = ((m.lcn + m.length) - 1) / clusters_per_chunk;
 
@@ -2047,14 +2050,16 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                       rph->ReparseDataLength, sizeof(WOF_EXTERNAL_INFO) + sizeof(FILE_PROVIDER_EXTERNAL_INFO_V0));
             }
 
-            auto fpei = (FILE_PROVIDER_EXTERNAL_INFO_V0*)&wofei[1];
+            auto fpei = *(FILE_PROVIDER_EXTERNAL_INFO_V0*)&wofei[1];
 
-            if (fpei->Version != FILE_PROVIDER_CURRENT_VERSION) {
+            if (fpei.Version != FILE_PROVIDER_CURRENT_VERSION) {
                 throw formatted_error(FMT_STRING("rph->FILE_PROVIDER_EXTERNAL_INFO_V0 Version was {}, expected {}."),
-                                      fpei->Version, FILE_PROVIDER_CURRENT_VERSION);
+                                      fpei.Version, FILE_PROVIDER_CURRENT_VERSION);
             }
 
-            switch (fpei->Algorithm) {
+            reparse_point.clear();
+
+            switch (fpei.Algorithm) {
                 case FILE_PROVIDER_COMPRESSION_XPRESS4K:
                     throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS4K WofCompressedData"));
 
@@ -2068,7 +2073,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS16K WofCompressedData"));
 
                 default:
-                    throw formatted_error(FMT_STRING("Unrecognized WOF compression algorithm {}"), fpei->Algorithm);
+                    throw formatted_error(FMT_STRING("Unrecognized WOF compression algorithm {}"), fpei.Algorithm);
             }
         } catch (const exception& e) {
             if (filename.empty())
@@ -2126,13 +2131,15 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             process_mappings(dev, inode, mappings, runs);
 
             for (const auto& m : mappings) {
-                ed->decoded_size = ed2->size = ed2->num_bytes = m.length * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-                ii.st_blocks += ed->decoded_size;
+                if (m.lcn != 0) { // not sparse
+                    ed->decoded_size = ed2->size = ed2->num_bytes = m.length * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+                    ii.st_blocks += ed->decoded_size;
 
-                ed2->address = (m.lcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster) + chunk_virt_offset;
-                ed2->offset = 0;
+                    ed2->address = (m.lcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster) + chunk_virt_offset;
+                    ed2->offset = 0;
 
-                add_item(r, inode, TYPE_EXTENT_DATA, m.vcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster, ed, (uint16_t)extlen);
+                    add_item(r, inode, TYPE_EXTENT_DATA, m.vcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster, ed, (uint16_t)extlen);
+                }
             }
         } catch (...) {
             free(ed);
