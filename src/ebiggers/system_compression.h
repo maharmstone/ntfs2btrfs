@@ -17,8 +17,11 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _NTFS_SYSTEM_COMPRESSION_H
-#define _NTFS_SYSTEM_COMPRESSION_H
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include <stddef.h>
 #include <sys/types.h>
@@ -55,4 +58,6 @@ extern int lzx_decompress(struct lzx_decompressor *decompressor,
 
 extern void lzx_free_decompressor(struct lzx_decompressor *decompressor);
 
-#endif /* _NTFS_SYSTEM_COMPRESSION_H */
+#ifdef __cplusplus
+}
+#endif

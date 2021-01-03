@@ -16,6 +16,9 @@
  * along with Ntfs2btrfs. If not, see <https://www.gnu.org/licenses/>. */
 
 #include "ntfs2btrfs.h"
+#include "ebiggers/system_compression.h"
+
+#define LZX_CHUNK_SIZE 32768
 
 using namespace std;
 
@@ -141,6 +144,38 @@ string lznt1_decompress(string_view compdata, uint64_t size) {
             }
         }
     }
+
+    return ret;
+}
+
+string do_lzx_decompress(const string_view& compdata, uint64_t size) {
+    auto ctx = lzx_allocate_decompressor(LZX_CHUNK_SIZE);
+
+    if (!ctx)
+        throw formatted_error(FMT_STRING("lzx_allocate_decompressor returned NULL."));
+
+    uint64_t num_chunks = (size + LZX_CHUNK_SIZE - 1) / LZX_CHUNK_SIZE;
+    auto offsets = (uint32_t*)compdata.data();
+
+    string ret;
+
+    ret.resize(size);
+
+    for (uint64_t i = 0; i < num_chunks; i++) {
+        uint64_t off = (num_chunks - 1) * sizeof(uint32_t);
+        if (i != 0)
+            off += offsets[i - 1];
+
+        auto err = lzx_decompress(ctx, compdata.data() + off, compdata.length() - off, ret.data() + (i * LZX_CHUNK_SIZE),
+                                  i == num_chunks - 1 ? (ret.length() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE);
+
+        if (err != 0) {
+            lzx_free_decompressor(ctx);
+            throw formatted_error(FMT_STRING("lzx_decompress returned {}."), err);
+        }
+    }
+
+    lzx_free_decompressor(ctx);
 
     return ret;
 }

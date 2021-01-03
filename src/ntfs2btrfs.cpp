@@ -2064,7 +2064,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS4K WofCompressedData"));
 
                 case FILE_PROVIDER_COMPRESSION_LZX:
-                    throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_LZX WofCompressedData"));
+                    mappings.clear();
+                    inline_data = do_lzx_decompress(wof_compressed_data, file_size);
+                    break;
 
                 case FILE_PROVIDER_COMPRESSION_XPRESS8K:
                     throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS8K WofCompressedData"));

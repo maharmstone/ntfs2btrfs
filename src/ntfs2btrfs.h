@@ -260,3 +260,4 @@ void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int s
 
 // decomp.cpp
 std::string lznt1_decompress(std::string_view compdata, uint64_t size);
+std::string do_lzx_decompress(const std::string_view& compdata, uint64_t size);
