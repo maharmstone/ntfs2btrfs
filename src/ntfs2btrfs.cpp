@@ -1754,7 +1754,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                         clusters += l;
                                     }
 
-                                    inline_data += lznt1_decompress(compdata, compdata.length());
+                                    inline_data += lznt1_decompress(compdata, min(compdata.length(), file_size - inline_data.length()));
 
                                     if (inline_data.length() >= file_size) {
                                         inline_data.resize(file_size);
