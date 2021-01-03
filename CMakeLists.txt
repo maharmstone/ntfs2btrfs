@@ -17,7 +17,11 @@ find_package(fmt REQUIRED)
 set(SRC_FILES src/ntfs2btrfs.cpp
     src/ntfs.cpp
     src/decomp.cpp
-    src/crc32c.c)
+    src/crc32c.c
+    src/ebiggers/lzx_decompress.c
+    src/ebiggers/lzx_common.c
+    src/ebiggers/aligned_malloc.c
+    src/ebiggers/decompress_common.c)
 
 if(MSVC)
     enable_language(ASM_MASM)
