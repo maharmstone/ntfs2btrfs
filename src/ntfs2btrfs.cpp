@@ -2058,21 +2058,24 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             }
 
             reparse_point.clear();
+            mappings.clear();
 
             switch (fpei.Algorithm) {
                 case FILE_PROVIDER_COMPRESSION_XPRESS4K:
-                    throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS4K WofCompressedData"));
+                    inline_data = do_xpress_decompress(wof_compressed_data, file_size, 4096);
+                    break;
 
                 case FILE_PROVIDER_COMPRESSION_LZX:
-                    mappings.clear();
                     inline_data = do_lzx_decompress(wof_compressed_data, file_size);
                     break;
 
                 case FILE_PROVIDER_COMPRESSION_XPRESS8K:
-                    throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS8K WofCompressedData"));
+                    inline_data = do_xpress_decompress(wof_compressed_data, file_size, 8192);
+                    break;
 
                 case FILE_PROVIDER_COMPRESSION_XPRESS16K:
-                    throw formatted_error(FMT_STRING("FIXME - FILE_PROVIDER_COMPRESSION_XPRESS16K WofCompressedData"));
+                    inline_data = do_xpress_decompress(wof_compressed_data, file_size, 16384);
+                    break;
 
                 default:
                     throw formatted_error(FMT_STRING("Unrecognized WOF compression algorithm {}"), fpei.Algorithm);

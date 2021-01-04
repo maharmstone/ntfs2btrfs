@@ -179,3 +179,35 @@ string do_lzx_decompress(const string_view& compdata, uint64_t size) {
 
     return ret;
 }
+
+string do_xpress_decompress(const string_view& compdata, uint64_t size, uint32_t chunk_size) {
+    auto ctx = xpress_allocate_decompressor();
+
+    if (!ctx)
+        throw formatted_error(FMT_STRING("xpress_allocate_decompressor returned NULL."));
+
+    uint64_t num_chunks = (size + chunk_size - 1) / chunk_size;
+    auto offsets = (uint32_t*)compdata.data();
+
+    string ret;
+
+    ret.resize(size);
+
+    for (uint64_t i = 0; i < num_chunks; i++) {
+        uint64_t off = (num_chunks - 1) * sizeof(uint32_t);
+        if (i != 0)
+            off += offsets[i - 1];
+
+        auto err = xpress_decompress(ctx, compdata.data() + off, compdata.length() - off, ret.data() + (i * chunk_size),
+                                     i == num_chunks - 1 ? (ret.length() - (i * chunk_size)) : chunk_size);
+
+        if (err != 0) {
+            xpress_free_decompressor(ctx);
+            throw formatted_error(FMT_STRING("xpress_decompress returned {}."), err);
+        }
+    }
+
+    xpress_free_decompressor(ctx);
+
+    return ret;
+}
