@@ -2208,7 +2208,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     for (auto it = runs.begin(); it != runs.end(); it++) {
                         auto& r = *it;
 
-                        if (r.offset > lcn + cl) {
+                        if (r.offset >= lcn + cl) {
                             runs.emplace(it, lcn, cl, inode, pos, false, true);
                             inserted = true;
                             break;
