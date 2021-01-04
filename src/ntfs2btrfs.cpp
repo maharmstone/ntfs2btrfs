@@ -317,7 +317,7 @@ static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) 
     throw formatted_error(FMT_STRING("Could not allocate metadata address"));
 }
 
-static uint64_t allocate_data(uint64_t length) {
+static uint64_t allocate_data(uint64_t length, bool change_used) {
     uint64_t disk_offset;
     bool found = false;
 
@@ -334,7 +334,9 @@ static uint64_t allocate_data(uint64_t length) {
                         it->length -= length;
                     }
 
-                    c.used += length;
+                    if (change_used)
+                        c.used += length;
+
                     return addr;
                 }
             }
@@ -376,7 +378,8 @@ static uint64_t allocate_data(uint64_t length) {
                 it->length -= length;
             }
 
-            c.used = length;
+            if (change_used)
+                c.used = length;
 
             return addr;
         }
@@ -2191,7 +2194,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     ed->decoded_size = ed2->size = ed2->num_bytes = len;
                     ii.st_blocks += ed->decoded_size;
 
-                    ed2->address = allocate_data(len);
+                    ed2->address = allocate_data(len, true);
                     ed2->offset = 0;
 
                     dev.seek(ed2->address - chunk_virt_offset);
@@ -2510,7 +2513,7 @@ static void protect_data(ntfs& dev, list<data_alloc>& runs, uint64_t cluster_sta
     if (split_runs(runs, cluster_start, cluster_end - cluster_start, dummy_inode, 0)) {
         string sb;
         uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-        uint64_t addr = allocate_data((cluster_end - cluster_start) * cluster_size) - chunk_virt_offset;
+        uint64_t addr = allocate_data((cluster_end - cluster_start) * cluster_size, false) - chunk_virt_offset;
 
         if (cluster_end * cluster_size > orig_device_size)
             sb.resize(orig_device_size - (cluster_start * cluster_size));
