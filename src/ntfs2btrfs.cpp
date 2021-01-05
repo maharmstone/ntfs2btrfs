@@ -1775,11 +1775,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                                 throw formatted_error(FMT_STRING("{}: {}"), filename, e.what());
                             }
-                        } else {
-                            // FIXME - if ValidDataLength < FileSize, will need to zero end
-
+                        } else
                             read_nonresident_mappings(att, mappings, cluster_size, vdl);
-                        }
                     }
 
                     processed_data = true;
@@ -2138,6 +2135,53 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         try {
             process_mappings(dev, inode, mappings, runs);
 
+            if (vdl < file_size) {
+                uint64_t alloc_size = sector_align(file_size, sector_size);
+                uint64_t alloc_vdl = sector_align(vdl, sector_size);
+
+                if (!mappings.empty() && (mappings.back().vcn + mappings.back().length) < alloc_size / sector_size) {
+                    mappings.emplace_back(0, mappings.back().vcn + mappings.back().length,
+                                          (alloc_size / sector_size) - mappings.back().vcn - mappings.back().length);
+                }
+
+                while (alloc_vdl < alloc_size) { // for whole sectors, replace with sparse extents
+                    if (!mappings.empty()) {
+                        auto& m = mappings.back();
+
+                        if (m.length * sector_size > alloc_size - alloc_vdl) {
+                            uint64_t sub = (alloc_size - alloc_vdl) / sector_size;
+
+                            if (sub > 0) {
+                                m.length -= sub * sector_size;
+                                alloc_size -= sub * sector_size;
+                            }
+
+                            break;
+                        } else {
+                            alloc_size -= m.length * sector_size;
+                            mappings.pop_back();
+                        }
+                    } else {
+                        alloc_size = alloc_vdl;
+                        break;
+                    }
+                }
+
+                if (vdl < alloc_size) { // zero end of final sector if necessary
+                    string sector;
+
+                    sector.resize(sector_size);
+
+                    dev.seek((mappings.back().lcn + mappings.back().length - 1) * cluster_size);
+                    dev.read(sector.data(), sector.length());
+
+                    memset(sector.data() + (vdl % sector_size), 0, sector_size - (vdl % sector_size));
+
+                    dev.seek((mappings.back().lcn + mappings.back().length - 1) * cluster_size);
+                    dev.write(sector.data(), sector.length());
+                }
+            }
+
             for (const auto& m : mappings) {
                 if (m.lcn != 0) { // not sparse
                     ed->decoded_size = ed2->size = ed2->num_bytes = m.length * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
@@ -2213,14 +2257,14 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         auto& r = *it;
 
                         if (r.offset >= lcn + cl) {
-                            runs.emplace(it, lcn, cl, inode, pos, false, true);
+                            runs.emplace(it, lcn, cl, inode, pos / cluster_size, false, true);
                             inserted = true;
                             break;
                         }
                     }
 
                     if (!inserted)
-                        runs.emplace_back(lcn, cl, inode, pos, false, true);
+                        runs.emplace_back(lcn, cl, inode, pos / cluster_size, false, true);
 
                     if (inline_data.length() > len) {
                         pos += len;
