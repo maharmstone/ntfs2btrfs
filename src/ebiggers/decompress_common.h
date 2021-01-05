@@ -402,7 +402,7 @@ read_huffsym(struct input_bitstream *is, const u16 decode_table[],
  * table for a Huffman code.
  */
 #define DECODE_TABLE_WORKING_SPACE(name, num_syms, max_codeword_len)	\
-	u16 name[2 * ((max_codeword_len) + 1)  + (num_syms)];
+	u16 name[2 * ((max_codeword_len) + 1)  + (num_syms)]
 
 extern int
 make_huffman_decode_table(u16 decode_table[], unsigned num_syms,

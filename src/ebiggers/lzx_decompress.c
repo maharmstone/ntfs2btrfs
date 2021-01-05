@@ -437,9 +437,9 @@ lzx_decompress_block(struct lzx_decompressor *d, struct input_bitstream *is,
 }
 
 int
-lzx_decompress(struct lzx_decompressor *restrict d,
-	       const void *restrict compressed_data, size_t compressed_size,
-	       void *restrict uncompressed_data, size_t uncompressed_size)
+lzx_decompress(struct lzx_decompressor *d,
+	       const void *compressed_data, size_t compressed_size,
+	       void *uncompressed_data, size_t uncompressed_size)
 {
 	u8 * const out_begin = uncompressed_data;
 	u8 *out_next = out_begin;

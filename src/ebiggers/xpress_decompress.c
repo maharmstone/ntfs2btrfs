@@ -85,9 +85,9 @@ struct xpress_decompressor {
 } _aligned_attribute(DECODE_TABLE_ALIGNMENT);
 
 int
-xpress_decompress(struct xpress_decompressor *restrict d,
-		  const void *restrict compressed_data, size_t compressed_size,
-		  void *restrict uncompressed_data, size_t uncompressed_size)
+xpress_decompress(struct xpress_decompressor * d,
+                 const void *compressed_data, size_t compressed_size,
+                 void *uncompressed_data, size_t uncompressed_size)
 {
 	const u8 * const in_begin = compressed_data;
 	u8 * const out_begin = uncompressed_data;
