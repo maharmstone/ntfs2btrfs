@@ -13,6 +13,9 @@ responsibility if something goes awry!
 You're probably also interested in [WinBtrfs](https://github.com/maharmstone/btrfs),
 which is a Btrfs filesystem driver for Windows.
 
+Thanks to [Eric Biggers](https://github.com/ebiggers), who [successfully reverse-engineered](https://github.com/ebiggers/ntfs-3g-system-compression/) Windows 10's
+"WOF compressed data", and whose code I've used here.
+
 Usage
 -----
 
