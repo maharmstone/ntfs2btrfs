@@ -1697,7 +1697,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     }
 
                     if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM && !processed_data) {
-                        file_size = att->Form.Resident.ValueLength;
+                        file_size = vdl = att->Form.Resident.ValueLength;
 
                         inline_data = res_data;
                     } else {
@@ -2244,6 +2244,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             ed->type = EXTENT_TYPE_INLINE;
 
             memcpy(ed->data, inline_data.data(), inline_data.length());
+
+            if (vdl < inline_data.length())
+                memset(ed->data + vdl, 0, inline_data.length() - vdl);
 
             add_item(r, inode, TYPE_EXTENT_DATA, 0, ed, (uint16_t)extlen);
 
