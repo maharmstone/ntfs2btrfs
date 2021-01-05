@@ -161,17 +161,31 @@ string do_lzx_decompress(const string_view& compdata, uint64_t size) {
 
     ret.resize(size);
 
+    auto data = string_view(compdata.data() + ((num_chunks - 1) * sizeof(uint32_t)),
+                            compdata.length() - ((num_chunks - 1) * sizeof(uint32_t)));
+
     for (uint64_t i = 0; i < num_chunks; i++) {
-        uint64_t off = (num_chunks - 1) * sizeof(uint32_t);
-        if (i != 0)
-            off += offsets[i - 1];
+        uint64_t off = i == 0 ? 0 : offsets[i - 1];
+        uint64_t complen;
 
-        auto err = lzx_decompress(ctx, compdata.data() + off, compdata.length() - off, ret.data() + (i * LZX_CHUNK_SIZE),
-                                  i == num_chunks - 1 ? (ret.length() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE);
+        if (i == 0)
+            complen = num_chunks > 1 ? offsets[0] : data.length();
+        else if (i == num_chunks - 1)
+            complen = data.length() - offsets[i - 1];
+        else
+            complen = offsets[i] - offsets[i - 1];
 
-        if (err != 0) {
-            lzx_free_decompressor(ctx);
-            throw formatted_error(FMT_STRING("lzx_decompress returned {}."), err);
+        if (complen == (i == num_chunks - 1 ? (ret.length() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE)) {
+            // stored uncompressed
+            memcpy(ret.data() + (i * LZX_CHUNK_SIZE), data.data() + off, complen);
+        } else {
+            auto err = lzx_decompress(ctx, data.data() + off, complen, ret.data() + (i * LZX_CHUNK_SIZE),
+                                      i == num_chunks - 1 ? (ret.length() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE);
+
+            if (err != 0) {
+                lzx_free_decompressor(ctx);
+                throw formatted_error(FMT_STRING("lzx_decompress returned {}."), err);
+            }
         }
     }
 
