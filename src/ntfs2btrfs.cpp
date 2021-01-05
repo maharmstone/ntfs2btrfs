@@ -2035,12 +2035,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                       reparse_point.length(), offsetof(reparse_point_header, DataBuffer) + rph->ReparseDataLength);
             }
 
-            if (rph->ReparseDataLength < sizeof(WOF_EXTERNAL_INFO)) {
+            if (rph->ReparseDataLength < sizeof(wof_external_info)) {
                 throw formatted_error(FMT_STRING("rph->ReparseDataLength was {} bytes, expected at least {}."),
-                                      rph->ReparseDataLength, sizeof(WOF_EXTERNAL_INFO));
+                                      rph->ReparseDataLength, sizeof(wof_external_info));
             }
 
-            auto wofei = (WOF_EXTERNAL_INFO*)rph->DataBuffer;
+            auto wofei = (wof_external_info*)rph->DataBuffer;
 
             if (wofei->Version != WOF_CURRENT_VERSION)
                 throw formatted_error(FMT_STRING("Unsupported WOF version {}."), wofei->Version);
@@ -2050,12 +2050,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             else if (wofei->Provider != WOF_PROVIDER_FILE)
                 throw formatted_error(FMT_STRING("Unsupported WOF provider {}."), wofei->Provider);
 
-            if (rph->ReparseDataLength < sizeof(WOF_EXTERNAL_INFO) + sizeof(FILE_PROVIDER_EXTERNAL_INFO_V0)) {
+            if (rph->ReparseDataLength < sizeof(wof_external_info) + sizeof(file_provider_external_info_v0)) {
                 throw formatted_error(FMT_STRING("rph->ReparseDataLength was {} bytes, expected {}."),
-                                      rph->ReparseDataLength, sizeof(WOF_EXTERNAL_INFO) + sizeof(FILE_PROVIDER_EXTERNAL_INFO_V0));
+                                      rph->ReparseDataLength, sizeof(wof_external_info) + sizeof(file_provider_external_info_v0));
             }
 
-            auto fpei = *(FILE_PROVIDER_EXTERNAL_INFO_V0*)&wofei[1];
+            auto fpei = *(file_provider_external_info_v0*)&wofei[1];
 
             if (fpei.Version != FILE_PROVIDER_CURRENT_VERSION) {
                 throw formatted_error(FMT_STRING("rph->FILE_PROVIDER_EXTERNAL_INFO_V0 Version was {}, expected {}."),

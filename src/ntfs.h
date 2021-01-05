@@ -350,7 +350,7 @@ typedef struct {
 typedef struct {
     uint32_t Version;
     uint32_t Provider;
-} WOF_EXTERNAL_INFO;
+} wof_external_info; // WOF_EXTERNAL_INFO in winioctl.h
 
 #define FILE_PROVIDER_CURRENT_VERSION           1
 
@@ -362,7 +362,7 @@ typedef struct {
 typedef struct {
     uint32_t Version;
     uint32_t Algorithm;
-} FILE_PROVIDER_EXTERNAL_INFO_V0;
+} file_provider_external_info_v0; // FILE_PROVIDER_EXTERNAL_INFO_V0 in winioctl.h
 
 #pragma pack(pop)
 
