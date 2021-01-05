@@ -2179,6 +2179,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 memset(inline_data.data() + oldlen, 0, inline_data.length() - oldlen);
             }
 
+            // FIXME - do by sparse extents, if longer than a sector
+            if (vdl < inline_data.length())
+                memset(inline_data.data() + vdl, 0, inline_data.length() - vdl);
+
             try {
                 uint64_t pos = 0;
 
