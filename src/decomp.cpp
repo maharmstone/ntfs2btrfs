@@ -193,12 +193,13 @@ string do_xpress_decompress(const string_view& compdata, uint64_t size, uint32_t
 
     ret.resize(size);
 
-    for (uint64_t i = 0; i < num_chunks; i++) {
-        uint64_t off = (num_chunks - 1) * sizeof(uint32_t);
-        if (i != 0)
-            off += offsets[i - 1];
+    auto data = string_view(compdata.data() + ((num_chunks - 1) * sizeof(uint32_t)),
+                            compdata.length() - ((num_chunks - 1) * sizeof(uint32_t)));
 
-        auto err = xpress_decompress(ctx, compdata.data() + off, compdata.length() - off, ret.data() + (i * chunk_size),
+    for (uint64_t i = 0; i < num_chunks; i++) {
+        uint64_t off = i == 0 ? 0 : offsets[i - 1];
+
+        auto err = xpress_decompress(ctx, data.data() + off, data.length() - off, ret.data() + (i * chunk_size),
                                      i == num_chunks - 1 ? (ret.length() - (i * chunk_size)) : chunk_size);
 
         if (err != 0) {
