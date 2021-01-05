@@ -1665,6 +1665,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     bool processed_data = false;
     uint16_t compression_unit;
     uint64_t vdl;
+    vector<string> warnings;
 
     static const uint32_t sector_size = 0x1000; // FIXME
 
@@ -1692,7 +1693,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        fmt::print(stderr, FMT_STRING("Skipping encrypted inode {:x} ({})\n"), inode - inode_offset, filename);
+                        warnings.emplace_back(fmt::format(FMT_STRING("Skipping encrypted inode {:x} ({})"), inode - inode_offset, filename));
                         return true;
                     }
 
@@ -1794,7 +1795,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        fmt::print(stderr, FMT_STRING("Skipping encrypted ADS {}:{}\n"), filename, ads_name);
+                        warnings.emplace_back(fmt::format(FMT_STRING("Skipping encrypted ADS {}:{}"), filename, ads_name));
 
                         break;
                     }
@@ -1805,7 +1806,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        fmt::print(stderr, FMT_STRING("Skipping compressed ADS {}:{}\n"), filename, ads_name); // FIXME
+                        warnings.emplace_back(fmt::format(FMT_STRING("Skipping compressed ADS {}:{}"), filename, ads_name)); // FIXME
 
                         break;
                     }
@@ -1824,7 +1825,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                 if (filename.empty())
                                     filename = f.get_filename();
 
-                                fmt::print(stderr, FMT_STRING("Skipping overly large ADS {}:{} ({} > {})\n"), filename.c_str(), ads_name.c_str(), att->Form.Resident.ValueLength, max_xattr_size);
+                                warnings.emplace_back(fmt::format(FMT_STRING("Skipping overly large ADS {}:{} ({} > {})"), filename, ads_name, att->Form.Resident.ValueLength, max_xattr_size));
 
                                 break;
                             }
@@ -1838,7 +1839,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             if (filename.empty())
                                 filename = f.get_filename();
 
-                            fmt::print(stderr, FMT_STRING("Skipping overly large ADS {}:{} ({} > {})\n"), filename.c_str(), ads_name.c_str(), att->Form.Nonresident.FileSize, max_xattr_size);
+                            warnings.emplace_back(fmt::format(FMT_STRING("Skipping overly large ADS {}:{} ({} > {})"), filename, ads_name, att->Form.Nonresident.FileSize, max_xattr_size));
 
                             break;
                         }
@@ -1931,7 +1932,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             if (filename.empty())
                                 filename = f.get_filename();
 
-                            fmt::print(stderr, FMT_STRING("Reparse point buffer of {} was truncated."), filename);
+                            warnings.emplace_back(fmt::format(FMT_STRING("Reparse point buffer of {} was truncated."), filename));
                         } else {
                             symlink = convert.to_bytes(&rpb->SymbolicLinkReparseBuffer.PathBuffer[rpb->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(char16_t)],
                                                        &rpb->SymbolicLinkReparseBuffer.PathBuffer[(rpb->SymbolicLinkReparseBuffer.PrintNameOffset + rpb->SymbolicLinkReparseBuffer.PrintNameLength) / sizeof(char16_t)]);
@@ -1963,6 +1964,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     if (links.empty())
         return; // don't create orphaned inodes
+
+    for (const auto& w : warnings) {
+        fmt::print(stderr, "{}\n", w);
+    }
 
     memset(&ii, 0, sizeof(INODE_ITEM));
 
