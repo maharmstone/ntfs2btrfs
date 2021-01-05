@@ -198,13 +198,26 @@ string do_xpress_decompress(const string_view& compdata, uint64_t size, uint32_t
 
     for (uint64_t i = 0; i < num_chunks; i++) {
         uint64_t off = i == 0 ? 0 : offsets[i - 1];
+        uint64_t complen;
 
-        auto err = xpress_decompress(ctx, data.data() + off, data.length() - off, ret.data() + (i * chunk_size),
-                                     i == num_chunks - 1 ? (ret.length() - (i * chunk_size)) : chunk_size);
+        if (i == 0)
+            complen = num_chunks > 1 ? offsets[0] : data.length();
+        else if (i == num_chunks - 1)
+            complen = data.length() - offsets[i - 1];
+        else
+            complen = offsets[i] - offsets[i - 1];
 
-        if (err != 0) {
-            xpress_free_decompressor(ctx);
-            throw formatted_error(FMT_STRING("xpress_decompress returned {}."), err);
+        if (complen == (i == num_chunks - 1 ? (ret.length() - (i * chunk_size)) : chunk_size)) {
+            // stored uncompressed
+            memcpy(ret.data() + (i * chunk_size), data.data() + off, complen);
+        } else {
+            auto err = xpress_decompress(ctx, data.data() + off, complen, ret.data() + (i * chunk_size),
+                                        i == num_chunks - 1 ? (ret.length() - (i * chunk_size)) : chunk_size);
+
+            if (err != 0) {
+                xpress_free_decompressor(ctx);
+                throw formatted_error(FMT_STRING("xpress_decompress returned {}."), err);
+            }
         }
     }
 
