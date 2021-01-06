@@ -5,7 +5,7 @@ else()
     cmake_minimum_required(VERSION 3.14.3)
 endif()
 
-project(ntfs2btrfs VERSION 20201108)
+project(ntfs2btrfs VERSION 20210105)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 

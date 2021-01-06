@@ -38,13 +38,19 @@ download the latest Zip file.
 
 For Linux:
 * [Arch](https://aur.archlinux.org/packages/ntfs2btrfs-git) (thanks to [nicman23](https://github.com/nicman23))
-* [Gentoo ebuild](https://raw.githubusercontent.com/maharmstone/ntfs2btrfs/master/ntfs2btrfs-20201108.ebuild)
+* [Gentoo ebuild](https://raw.githubusercontent.com/maharmstone/ntfs2btrfs/master/ntfs2btrfs-20210105.ebuild)
 
 For other distributions or operating systems, you will need to compile it yourself - see
 below.
 
 Changelog
 ---------
+
+* 20210105
+  * Added support for NTFS compression
+  * Added support for "WOF compressed data"
+  * Fixed problems caused by sparse files
+  * Miscellaneous bug fixes
 
 * 20201108
   * Improved error handling
@@ -88,9 +94,7 @@ What doesn't work
 * Preservation of LXSS metadata
 * Preservation of the case-sensitivity flag
 * Unusual cluster sizes (i.e. not 4 KB)
-* Compressed files (skipped for now)
 * Encrypted files
-* "WofCompressedData" (see https://devblogs.microsoft.com/oldnewthing/20190618-00/?p=102597)
 
 Can I boot Windows from Btrfs with this?
 ----------------------------------------
