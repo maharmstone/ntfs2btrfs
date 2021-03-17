@@ -15,9 +15,9 @@
  * You should have received a copy of the GNU Lesser General Public Licence
  * along with WinBtrfs.  If not, see <http://www.gnu.org/licenses/>. */
 
-.intel_syntax noprefix
-
 #ifdef __i386__
+
+.intel_syntax noprefix
 
 .extern _crctable
 .global _calc_crc32c_sw@12
@@ -120,6 +120,8 @@ pop ebp
 ret 12
 
 #elif defined(__x86_64__)
+
+.intel_syntax noprefix
 
 .extern crctable
 .global calc_crc32c_sw
