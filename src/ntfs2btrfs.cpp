@@ -1724,7 +1724,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                 uint64_t vcn = att->Form.Nonresident.LowestVcn;
 
                                 while (true) {
-                                    uint64_t clusters = 0;
+                                    uint64_t clusters = 0, compsize;
 
                                     while (clusters < cus) {
                                         if (comp_mappings.empty()) {
@@ -1758,7 +1758,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                         clusters += l;
                                     }
 
-                                    inline_data += lznt1_decompress(compdata, min(compdata.length(), file_size - inline_data.length()));
+                                    compsize = compdata.length();
+
+                                    if (file_size - inline_data.length() < compsize)
+                                        compsize = file_size - inline_data.length();
+
+                                    inline_data += lznt1_decompress(compdata, compsize);
 
                                     if (inline_data.length() >= file_size) {
                                         inline_data.resize(file_size);
