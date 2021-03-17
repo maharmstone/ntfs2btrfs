@@ -19,13 +19,23 @@
 
 .intel_syntax noprefix
 
+#ifdef __MINGW32__
 .extern _crctable
 .global _calc_crc32c_sw@12
 .global _calc_crc32c_hw@12
+#else
+.extern crctable
+.global calc_crc32c_sw
+.global calc_crc32c_hw
+#endif
 
 /* uint32_t __stdcall calc_crc32c_sw(uint32_t seed, uint8_t* msg, uint32_t msglen); */
 
+#ifdef __MINGW32__
 _calc_crc32c_sw@12:
+#else
+calc_crc32c_sw:
+#endif
 
 push ebp
 mov ebp, esp
@@ -53,7 +63,13 @@ mov cl, byte ptr [edx]
 xor al, cl
 and eax, 255
 shl eax, 2
+
+#ifdef __MINGW32__
 mov eax, [_crctable + eax]
+#else
+mov eax, [crctable + eax]
+#endif
+
 xor eax, esi
 
 inc edx
@@ -73,7 +89,11 @@ ret 12
 
 /* uint32_t __stdcall calc_crc32c_hw(uint32_t seed, uint8_t* msg, uint32_t msglen); */
 
+#ifdef __MINGW32__
 _calc_crc32c_hw@12:
+#else
+calc_crc32c_hw:
+#endif
 
 push ebp
 mov ebp, esp
