@@ -72,7 +72,7 @@ static string lznt1_decompress_chunk(string_view data) {
                     auto l = (v & lm) + 3;
                     auto d = (v >> os) + 1;
 
-                    s.reserve(s.length() + l);
+                    s.reserve((uint32_t)(s.length() + l));
 
                     while (l > 0) {
                         s.append(s.substr(s.length() - d, 1));
@@ -88,7 +88,7 @@ static string lznt1_decompress_chunk(string_view data) {
     return s;
 }
 
-string lznt1_decompress(string_view compdata, uint64_t size) {
+string lznt1_decompress(string_view compdata, uint32_t size) {
     string ret;
     char* ptr;
 
@@ -113,7 +113,7 @@ string lznt1_decompress(string_view compdata, uint64_t size) {
         if (sig != 3)
             throw formatted_error(FMT_STRING("Compression signature was {}, expected 3."), sig);
 
-        auto len = (((uint64_t)h & 0xfff) + 1);
+        auto len = (uint32_t)(((uint64_t)h & 0xfff) + 1);
 
         if (compdata.length() < len)
             throw formatted_error(FMT_STRING("compdata was {} bytes, expected at least {}."), compdata.length(), len);
@@ -148,7 +148,7 @@ string lznt1_decompress(string_view compdata, uint64_t size) {
     return ret;
 }
 
-string do_lzx_decompress(const string_view& compdata, uint64_t size) {
+string do_lzx_decompress(const string_view& compdata, uint32_t size) {
     auto ctx = lzx_allocate_decompressor(LZX_CHUNK_SIZE);
 
     if (!ctx)
@@ -162,11 +162,11 @@ string do_lzx_decompress(const string_view& compdata, uint64_t size) {
     ret.resize(size);
 
     auto data = string_view(compdata.data() + ((num_chunks - 1) * sizeof(uint32_t)),
-                            compdata.length() - ((num_chunks - 1) * sizeof(uint32_t)));
+                            (uint32_t)(compdata.length() - ((num_chunks - 1) * sizeof(uint32_t))));
 
     for (uint64_t i = 0; i < num_chunks; i++) {
         uint64_t off = i == 0 ? 0 : offsets[i - 1];
-        uint64_t complen;
+        uint32_t complen;
 
         if (i == 0)
             complen = num_chunks > 1 ? offsets[0] : data.length();
@@ -180,7 +180,7 @@ string do_lzx_decompress(const string_view& compdata, uint64_t size) {
             memcpy(ret.data() + (i * LZX_CHUNK_SIZE), data.data() + off, complen);
         } else {
             auto err = lzx_decompress(ctx, data.data() + off, complen, ret.data() + (i * LZX_CHUNK_SIZE),
-                                      i == num_chunks - 1 ? (ret.length() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE);
+                                      (uint32_t)(i == num_chunks - 1 ? (ret.length() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE));
 
             if (err != 0) {
                 lzx_free_decompressor(ctx);
@@ -194,7 +194,7 @@ string do_lzx_decompress(const string_view& compdata, uint64_t size) {
     return ret;
 }
 
-string do_xpress_decompress(const string_view& compdata, uint64_t size, uint32_t chunk_size) {
+string do_xpress_decompress(const string_view& compdata, uint32_t size, uint32_t chunk_size) {
     auto ctx = xpress_allocate_decompressor();
 
     if (!ctx)
@@ -208,11 +208,11 @@ string do_xpress_decompress(const string_view& compdata, uint64_t size, uint32_t
     ret.resize(size);
 
     auto data = string_view(compdata.data() + ((num_chunks - 1) * sizeof(uint32_t)),
-                            compdata.length() - ((num_chunks - 1) * sizeof(uint32_t)));
+                            (uint32_t)(compdata.length() - ((num_chunks - 1) * sizeof(uint32_t))));
 
     for (uint64_t i = 0; i < num_chunks; i++) {
         uint64_t off = i == 0 ? 0 : offsets[i - 1];
-        uint64_t complen;
+        uint32_t complen;
 
         if (i == 0)
             complen = num_chunks > 1 ? offsets[0] : data.length();
@@ -226,7 +226,7 @@ string do_xpress_decompress(const string_view& compdata, uint64_t size, uint32_t
             memcpy(ret.data() + (i * chunk_size), data.data() + off, complen);
         } else {
             auto err = xpress_decompress(ctx, data.data() + off, complen, ret.data() + (i * chunk_size),
-                                        i == num_chunks - 1 ? (ret.length() - (i * chunk_size)) : chunk_size);
+                                         (size_t)(i == num_chunks - 1 ? (ret.length() - (i * chunk_size)) : chunk_size));
 
             if (err != 0) {
                 xpress_free_decompressor(ctx);

@@ -379,7 +379,7 @@ struct mapping {
 class ntfs_file {
 public:
     ntfs_file(ntfs& dev, uint64_t inode);
-    std::string read(size_t offset = 0, size_t length = 0, enum ntfs_attribute type = ntfs_attribute::DATA, const std::u16string_view& name = u"");
+    std::string read(uint64_t offset = 0, uint32_t length = 0, enum ntfs_attribute type = ntfs_attribute::DATA, const std::u16string_view& name = u"");
     std::list<mapping> read_mappings(enum ntfs_attribute type = ntfs_attribute::DATA, const std::u16string_view& name = u"");
 
     bool is_directory() const {
@@ -392,7 +392,7 @@ public:
     FILE_RECORD_SEGMENT_HEADER* file_record;
 
 private:
-    std::string read_nonresident_attribute(size_t offset, size_t length, const ATTRIBUTE_RECORD_HEADER* att);
+    std::string read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att);
 
     std::vector<char> file_record_buf;
     ntfs& dev;
@@ -412,7 +412,7 @@ public:
 #endif
     }
 
-    void seek(size_t pos);
+    void seek(uint64_t pos);
     void read(char* buf, size_t length);
     void write(const char* buf, size_t length);
 

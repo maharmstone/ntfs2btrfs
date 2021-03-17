@@ -122,7 +122,7 @@ static void create_data_chunks(ntfs& dev, const string& bmpdata) {
     // FIXME - make sure we stop at disk end - don't create a chunk at end purely because of NTFS overround
 
     while (bdsv.length() > 0) {
-        string_view csv = bdsv.substr(0, clusters_per_chunk / 8);
+        string_view csv = bdsv.substr(0, (size_t)(clusters_per_chunk / 8));
         size_t len = csv.length();
         bool chunk_used = false;
 
@@ -660,7 +660,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root) {
     uint32_t sys_chunk_size;
     uint64_t total_used;
 
-    buf.resize(sector_align(sizeof(superblock), sector_size));
+    buf.resize((size_t)sector_align(sizeof(superblock), sector_size));
     sb = (superblock*)buf.data();
 
     memset(buf.data(), 0, buf.length());
@@ -1718,7 +1718,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                             read_nonresident_mappings(att, comp_mappings, cluster_size, vdl);
 
-                            compdata.resize(cus * cluster_size);
+                            compdata.resize((size_t)(cus * cluster_size));
 
                             try {
                                 uint64_t vcn = att->Form.Nonresident.LowestVcn;
@@ -1728,7 +1728,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                                     while (clusters < cus) {
                                         if (comp_mappings.empty()) {
-                                            memset(compdata.data() + (clusters * cluster_size), 0, (cus - clusters) * cluster_size);
+                                            memset(compdata.data() + (clusters * cluster_size), 0, (size_t)((cus - clusters) * cluster_size));
                                             break;
                                         }
 
@@ -1736,7 +1736,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                         auto l = min(m.length, cus - clusters);
 
                                         if (m.lcn == 0) {
-                                            memset(compdata.data() + (clusters * cluster_size), 0, l * cluster_size);
+                                            memset(compdata.data() + (clusters * cluster_size), 0, (size_t)(l * cluster_size));
 
                                             if (l < m.length) {
                                                 m.vcn += l;
@@ -1745,7 +1745,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                                 comp_mappings.pop_front();
                                         } else {
                                             dev.seek(m.lcn * cluster_size);
-                                            dev.read(compdata.data() + (clusters * cluster_size), l * cluster_size);
+                                            dev.read(compdata.data() + (clusters * cluster_size), (size_t)(l * cluster_size));
 
                                             if (l < m.length) {
                                                 m.lcn += l;
@@ -1763,10 +1763,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                     if (file_size - inline_data.length() < compsize)
                                         compsize = file_size - inline_data.length();
 
-                                    inline_data += lznt1_decompress(compdata, compsize);
+                                    inline_data += lznt1_decompress(compdata, (uint32_t)compsize);
 
                                     if (inline_data.length() >= file_size) {
-                                        inline_data.resize(file_size);
+                                        inline_data.resize((size_t)file_size);
                                         break;
                                     }
 
@@ -1854,15 +1854,15 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         read_nonresident_mappings(att, ads_mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
 
-                        ads_data.resize(sector_align(att->Form.Nonresident.FileSize, cluster_size));
+                        ads_data.resize((size_t)sector_align(att->Form.Nonresident.FileSize, cluster_size));
                         memset(ads_data.data(), 0, ads_data.length());
 
                         for (const auto& m : ads_mappings) {
                             dev.seek(m.lcn * cluster_size);
-                            dev.read(ads_data.data() + (m.vcn * cluster_size), m.length * cluster_size);
+                            dev.read(ads_data.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
                         }
 
-                        ads_data.resize(att->Form.Nonresident.FileSize);
+                        ads_data.resize((size_t)att->Form.Nonresident.FileSize);
 
                         if (ads_name == "WofCompressedData")
                             wof_compressed_data = ads_data;
@@ -2072,19 +2072,19 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             switch (fpei.Algorithm) {
                 case FILE_PROVIDER_COMPRESSION_XPRESS4K:
-                    inline_data = do_xpress_decompress(wof_compressed_data, file_size, 4096);
+                    inline_data = do_xpress_decompress(wof_compressed_data, (uint32_t)file_size, 4096);
                     break;
 
                 case FILE_PROVIDER_COMPRESSION_LZX:
-                    inline_data = do_lzx_decompress(wof_compressed_data, file_size);
+                    inline_data = do_lzx_decompress(wof_compressed_data, (uint32_t)file_size);
                     break;
 
                 case FILE_PROVIDER_COMPRESSION_XPRESS8K:
-                    inline_data = do_xpress_decompress(wof_compressed_data, file_size, 8192);
+                    inline_data = do_xpress_decompress(wof_compressed_data, (uint32_t)file_size, 8192);
                     break;
 
                 case FILE_PROVIDER_COMPRESSION_XPRESS16K:
-                    inline_data = do_xpress_decompress(wof_compressed_data, file_size, 16384);
+                    inline_data = do_xpress_decompress(wof_compressed_data, (uint32_t)file_size, 16384);
                     break;
 
                 default:
@@ -2229,13 +2229,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             if (inline_data.length() & (sector_size - 1)) {
                 auto oldlen = inline_data.length();
 
-                inline_data.resize(sector_align(inline_data.length(), sector_size));
+                inline_data.resize((size_t)sector_align(inline_data.length(), sector_size));
                 memset(inline_data.data() + oldlen, 0, inline_data.length() - oldlen);
             }
 
             // FIXME - do by sparse extents, if longer than a sector
             if (vdl < inline_data.length())
-                memset(inline_data.data() + vdl, 0, inline_data.length() - vdl);
+                memset(inline_data.data() + vdl, 0, (size_t)(inline_data.length() - vdl));
 
             try {
                 uint64_t pos = 0;
@@ -2256,7 +2256,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     ed2->offset = 0;
 
                     dev.seek(ed2->address - chunk_virt_offset);
-                    dev.write(inline_data.data(), len);
+                    dev.write(inline_data.data(), (size_t)len);
 
                     add_item(r, inode, TYPE_EXTENT_DATA, pos, ed, (uint16_t)extlen);
 
@@ -2278,7 +2278,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                     if (inline_data.length() > len) {
                         pos += len;
-                        inline_data = inline_data.substr(len);
+                        inline_data = inline_data.substr((size_t)len);
                     } else
                         break;
                 }
@@ -2304,7 +2304,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             memcpy(ed->data, inline_data.data(), inline_data.length());
 
             if (vdl < inline_data.length())
-                memset(ed->data + vdl, 0, inline_data.length() - vdl);
+                memset(ed->data + vdl, 0, (size_t)(inline_data.length() - vdl));
 
             add_item(r, inode, TYPE_EXTENT_DATA, 0, ed, (uint16_t)extlen);
 
@@ -2541,8 +2541,8 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
         if (r.offset * cluster_size >= orig_device_size)
             break;
 
-        data.resize(r.length * cluster_size);
-        csums.resize(r.length * cluster_size / sector_size);
+        data.resize((size_t)(r.length * cluster_size));
+        csums.resize((size_t)(r.length * cluster_size / sector_size));
 
         dev.seek(r.offset * cluster_size);
         dev.read(data.data(), data.length());
@@ -2577,9 +2577,9 @@ static void protect_data(ntfs& dev, list<data_alloc>& runs, uint64_t cluster_sta
         uint64_t addr = allocate_data((cluster_end - cluster_start) * cluster_size, false) - chunk_virt_offset;
 
         if (cluster_end * cluster_size > orig_device_size)
-            sb.resize(orig_device_size - (cluster_start * cluster_size));
+            sb.resize((size_t)(orig_device_size - (cluster_start * cluster_size)));
         else
-            sb.resize((cluster_end - cluster_start) * cluster_size);
+            sb.resize((size_t)((cluster_end - cluster_start) * cluster_size));
 
         dev.seek(cluster_start * cluster_size);
         dev.read(sb.data(), sb.length());

@@ -55,15 +55,15 @@ void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int s
 }
 
 ntfs_file::ntfs_file(ntfs& dev, uint64_t inode) : dev(dev), inode(inode) {
-    file_record_buf.resize(dev.file_record_size);
+    file_record_buf.resize((size_t)dev.file_record_size);
 
     if (inode == 0) {
         dev.seek(dev.boot_sector->MFT * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster);
-        dev.read(file_record_buf.data(), dev.file_record_size);
+        dev.read(file_record_buf.data(), (uint32_t)dev.file_record_size);
     } else { // read from MFT
-        auto str = dev.mft->read(inode * dev.file_record_size, dev.file_record_size);
+        auto str = dev.mft->read(inode * dev.file_record_size, (uint32_t)dev.file_record_size);
 
-        memcpy(file_record_buf.data(), str.data(), dev.file_record_size); // FIXME - can we avoid copy?
+        memcpy(file_record_buf.data(), str.data(), (uint32_t)dev.file_record_size); // FIXME - can we avoid copy?
     }
 
     file_record = reinterpret_cast<FILE_RECORD_SEGMENT_HEADER*>(file_record_buf.data());
@@ -143,7 +143,7 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
     }
 }
 
-string ntfs_file::read_nonresident_attribute(size_t offset, size_t length, const ATTRIBUTE_RECORD_HEADER* att) {
+string ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att) {
     list<mapping> mappings;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     string ret;
@@ -156,24 +156,24 @@ string ntfs_file::read_nonresident_attribute(size_t offset, size_t length, const
         return "";
 
     if (offset + length > (uint64_t)att->Form.Nonresident.FileSize || length == 0)
-        length = att->Form.Nonresident.FileSize - offset;
+        length = (uint32_t)(att->Form.Nonresident.FileSize - offset);
 
     ret.resize(length);
     memset(ret.data(), 0, length);
 
     for (const auto& m : mappings) {
         if (offset + length >= m.vcn * cluster_size && offset < (m.vcn + m.length) * cluster_size) {
-            size_t buf_start, buf_end;
+            uint32_t buf_start, buf_end;
             uint64_t read_start, read_end;
             unsigned int skip_start, skip_end;
 
             if (offset < m.vcn * cluster_size)
-                buf_start = (m.vcn * cluster_size) - offset;
+                buf_start = (uint32_t)((m.vcn * cluster_size) - offset);
             else
                 buf_start = 0;
 
             if (offset + length > (m.vcn + m.length) * cluster_size)
-                buf_end = (m.vcn + m.length) * cluster_size;
+                buf_end = (uint32_t)((m.vcn + m.length) * cluster_size);
             else
                 buf_end = length;
 
@@ -201,9 +201,9 @@ string ntfs_file::read_nonresident_attribute(size_t offset, size_t length, const
             if (skip_start != 0 || skip_end != 0) {
                 string tmp;
 
-                tmp.resize(read_end - read_start);
+                tmp.resize((uint32_t)(read_end - read_start));
 
-                dev.read(tmp.data(), read_end - read_start);
+                dev.read(tmp.data(), (uint32_t)(read_end - read_start));
 
                 memcpy(&ret[buf_start], &tmp[skip_start], buf_end - buf_start);
             } else
@@ -216,7 +216,7 @@ string ntfs_file::read_nonresident_attribute(size_t offset, size_t length, const
     return ret;
 }
 
-string ntfs_file::read(size_t offset, size_t length, enum ntfs_attribute type, const u16string_view& name) {
+string ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute type, const u16string_view& name) {
     string ret;
     bool found = false;
 
@@ -237,11 +237,11 @@ string ntfs_file::read(size_t offset, size_t length, enum ntfs_attribute type, c
                 ret = "";
             else {
                 if (offset + length > res_data.length() || length == 0)
-                    length = res_data.length() - offset;
+                    length = (uint32_t)(res_data.length() - offset);
 
                 ret.resize(length);
 
-                memcpy(ret.data(), &res_data[offset], length);
+                memcpy(ret.data(), &res_data[(uint32_t)offset], length);
             }
         }
 
@@ -319,7 +319,7 @@ ntfs::ntfs(const string& fn) {
 #endif
 
     // read NTFS_BOOT_SECTOR
-    boot_sector_buf.resize(sector_align(sizeof(NTFS_BOOT_SECTOR), sector_size));
+    boot_sector_buf.resize((size_t)sector_align(sizeof(NTFS_BOOT_SECTOR), sector_size));
     seek(0);
     read(boot_sector_buf.data(), boot_sector_buf.size());
     boot_sector = reinterpret_cast<NTFS_BOOT_SECTOR*>(boot_sector_buf.data());
@@ -370,12 +370,12 @@ static string read_from_mappings(const list<mapping>& mappings, uint64_t start, 
 
             string buf;
 
-            buf.resize(read_end - read_start);
+            buf.resize((uint32_t)(read_end - read_start));
 
             dev.seek(read_start + ((m.lcn - m.vcn) * cluster_size));
-            dev.read(buf.data(), read_end - read_start);
+            dev.read(buf.data(), (uint32_t)(read_end - read_start));
 
-            memcpy(s.data(), buf.data() + read_start - start, min(read_end - read_start, length - read_start + start));
+            memcpy(s.data(), buf.data() + read_start - start, (size_t)min(read_end - read_start, length - read_start + start));
         }
     }
 
@@ -547,7 +547,7 @@ void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEA
 
         if (att->TypeCode == ntfs_attribute::ATTRIBUTE_LIST) {
             if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                attlist = read_nonresident_attribute(0, att->Form.Nonresident.FileSize, att);
+                attlist = read_nonresident_attribute(0, (uint32_t)att->Form.Nonresident.FileSize, att);
             else {
                 attlist.resize(att->Form.Resident.ValueLength);
 
@@ -744,7 +744,7 @@ string ntfs_file::get_filename() {
     return convert.to_bytes((char16_t*)retw.data(), (char16_t*)&retw[retw.length()]);
 }
 
-void ntfs::seek(size_t pos) {
+void ntfs::seek(uint64_t pos) {
 #ifdef _WIN32
     LARGE_INTEGER posli;
 

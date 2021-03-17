@@ -259,6 +259,6 @@ void populate_skip_list(ntfs& dev, uint64_t inode, std::list<uint64_t>& skiplist
 void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size);
 
 // decomp.cpp
-std::string lznt1_decompress(std::string_view compdata, uint64_t size);
-std::string do_lzx_decompress(const std::string_view& compdata, uint64_t size);
-std::string do_xpress_decompress(const std::string_view& compdata, uint64_t size, uint32_t chunk_size);
+std::string lznt1_decompress(std::string_view compdata, uint32_t size);
+std::string do_lzx_decompress(const std::string_view& compdata, uint32_t size);
+std::string do_xpress_decompress(const std::string_view& compdata, uint32_t size, uint32_t chunk_size);
