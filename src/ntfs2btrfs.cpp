@@ -1663,7 +1663,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     string filename, wof_compressed_data;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     bool processed_data = false;
-    uint16_t compression_unit;
+    uint16_t compression_unit = 0;
     uint64_t vdl;
     vector<string> warnings;
 
@@ -1711,78 +1711,20 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                 compression_unit = 0;
                         }
 
-                        if (compression_unit != 0) {
-                            list<mapping> comp_mappings;
-                            string compdata;
-                            uint64_t cus = 1 << compression_unit;
+                        list<mapping> mappings2;
+                        uint64_t last_vcn;
 
-                            read_nonresident_mappings(att, comp_mappings, cluster_size, vdl);
+                        if (mappings.empty())
+                            last_vcn = 0;
+                        else
+                            last_vcn = mappings.back().vcn + mappings.back().length;
 
-                            compdata.resize((size_t)(cus * cluster_size));
+                        if (last_vcn < att->Form.Nonresident.LowestVcn)
+                            mappings.emplace_back(0, last_vcn, att->Form.Nonresident.LowestVcn - last_vcn);
 
-                            try {
-                                uint64_t vcn = att->Form.Nonresident.LowestVcn;
+                        read_nonresident_mappings(att, mappings2, cluster_size, vdl);
 
-                                while (true) {
-                                    uint64_t clusters = 0, compsize;
-
-                                    while (clusters < cus) {
-                                        if (comp_mappings.empty()) {
-                                            memset(compdata.data() + (clusters * cluster_size), 0, (size_t)((cus - clusters) * cluster_size));
-                                            break;
-                                        }
-
-                                        auto& m = comp_mappings.front();
-                                        auto l = min(m.length, cus - clusters);
-
-                                        if (m.lcn == 0) {
-                                            memset(compdata.data() + (clusters * cluster_size), 0, (size_t)(l * cluster_size));
-
-                                            if (l < m.length) {
-                                                m.vcn += l;
-                                                m.length -= l;
-                                            } else
-                                                comp_mappings.pop_front();
-                                        } else {
-                                            dev.seek(m.lcn * cluster_size);
-                                            dev.read(compdata.data() + (clusters * cluster_size), (size_t)(l * cluster_size));
-
-                                            if (l < m.length) {
-                                                m.lcn += l;
-                                                m.vcn += l;
-                                                m.length -= l;
-                                            } else
-                                                comp_mappings.pop_front();
-                                        }
-
-                                        clusters += l;
-                                    }
-
-                                    compsize = compdata.length();
-
-                                    if (file_size - inline_data.length() < compsize)
-                                        compsize = file_size - inline_data.length();
-
-                                    inline_data += lznt1_decompress(compdata, (uint32_t)compsize);
-
-                                    if (inline_data.length() >= file_size) {
-                                        inline_data.resize((size_t)file_size);
-                                        break;
-                                    }
-
-                                    vcn += cus;
-
-                                    if (vcn >= att->Form.Nonresident.HighestVcn)
-                                        break;
-                                }
-                            } catch (const exception& e) {
-                                if (filename.empty())
-                                    filename = f.get_filename();
-
-                                throw formatted_error(FMT_STRING("{}: {}"), filename, e.what());
-                            }
-                        } else
-                            read_nonresident_mappings(att, mappings, cluster_size, vdl);
+                        mappings.splice(mappings.end(), mappings2);
                     }
 
                     processed_data = true;
@@ -1969,6 +1911,79 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     if (links.empty())
         return; // don't create orphaned inodes
+
+    if (compression_unit != 0) {
+        string compdata;
+        uint64_t cus = 1 << compression_unit;
+
+        compdata.resize((size_t)(cus * cluster_size));
+
+        try {
+            while (!mappings.empty()) {
+                uint64_t clusters = 0, compsize;
+                bool compressed = false;
+
+                while (clusters < cus) {
+                    if (mappings.empty()) {
+                        compressed = true;
+                        memset(compdata.data() + (clusters * cluster_size), 0, (size_t)((cus - clusters) * cluster_size));
+                        break;
+                    }
+
+                    auto& m = mappings.front();
+                    auto l = min(m.length, cus - clusters);
+
+                    if (m.lcn == 0) {
+                        memset(compdata.data() + (clusters * cluster_size), 0, (size_t)(l * cluster_size));
+
+                        if (l < m.length) {
+                            m.vcn += l;
+                            m.length -= l;
+                        } else
+                            mappings.pop_front();
+
+                        compressed = true;
+                    } else {
+                        dev.seek(m.lcn * cluster_size);
+                        dev.read(compdata.data() + (clusters * cluster_size), (size_t)(l * cluster_size));
+
+                        if (l < m.length) {
+                            m.lcn += l;
+                            m.vcn += l;
+                            m.length -= l;
+                        } else
+                            mappings.pop_front();
+                    }
+
+                    clusters += l;
+                }
+
+                if (!compressed) {
+                    if (filename.empty())
+                        filename = f.get_filename();
+
+                    inline_data += compdata;
+                } else {
+                    compsize = compdata.length();
+
+                    if (file_size - inline_data.length() < compsize)
+                        compsize = file_size - inline_data.length();
+
+                    inline_data += lznt1_decompress(compdata, (uint32_t)compsize);
+                }
+
+                if (inline_data.length() >= file_size) {
+                    inline_data.resize((size_t)file_size);
+                    break;
+                }
+            }
+        } catch (const exception& e) {
+            if (filename.empty())
+                filename = f.get_filename();
+
+            throw formatted_error(FMT_STRING("{}: {}"), filename, e.what());
+        }
+    }
 
     for (const auto& w : warnings) {
         fmt::print(stderr, "{}\n", w);
