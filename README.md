@@ -39,13 +39,16 @@ download the latest Zip file.
 For Linux:
 * [Arch](https://aur.archlinux.org/packages/ntfs2btrfs-git) (thanks to [nicman23](https://github.com/nicman23))
 * [Fedora](https://src.fedoraproject.org/rpms/ntfs2btrfs) (thanks to [Conan-Kudo](https://github.com/Conan-Kudo))
-* [Gentoo ebuild](https://raw.githubusercontent.com/maharmstone/ntfs2btrfs/master/ntfs2btrfs-20210402.ebuild)
+* [Gentoo ebuild](https://raw.githubusercontent.com/maharmstone/ntfs2btrfs/master/ntfs2btrfs-20210523.ebuild)
 
 For other distributions or operating systems, you will need to compile it yourself - see
 below.
 
 Changelog
 ---------
+
+* 20210523
+  * Improved handling of large compressed files
 
 * 20210402 (source code only release)
   * Fixes for compilation on non-amd64 architectures
