@@ -170,7 +170,7 @@ static void add_item(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset
     auto ret = r.items.emplace(KEY{obj_id, obj_type, offset}, tree_item{});
 
     if (!ret.second)
-        throw formatted_error(FMT_STRING("Could not insert entry ({:x}, {:x}, {:x}) into root items list."), obj_id, obj_type, offset);
+        throw formatted_error("Could not insert entry ({:x}, {:x}, {:x}) into root items list.", obj_id, obj_type, offset);
 
     auto& it = ret.first->second;
 
@@ -285,7 +285,7 @@ static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) 
     }
 
     if (!found)
-        throw formatted_error(FMT_STRING("Could not find enough space to create new chunk."));
+        throw formatted_error("Could not find enough space to create new chunk.");
 
     chunks.emplace_back(disk_offset + chunk_virt_offset, chunk_size, disk_offset, system_chunk ? BLOCK_FLAG_SYSTEM : BLOCK_FLAG_METADATA);
 
@@ -314,7 +314,7 @@ static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) 
         }
     }
 
-    throw formatted_error(FMT_STRING("Could not allocate metadata address"));
+    throw formatted_error("Could not allocate metadata address");
 }
 
 static uint64_t allocate_data(uint64_t length, bool change_used) {
@@ -357,7 +357,7 @@ static uint64_t allocate_data(uint64_t length, bool change_used) {
     }
 
     if (!found)
-        throw formatted_error(FMT_STRING("Could not find enough space to create new chunk."));
+        throw formatted_error("Could not find enough space to create new chunk.");
 
     chunks.emplace_back(disk_offset + chunk_virt_offset, data_chunk_size, disk_offset, BLOCK_FLAG_DATA);
 
@@ -385,7 +385,7 @@ static uint64_t allocate_data(uint64_t length, bool change_used) {
         }
     }
 
-    throw formatted_error(FMT_STRING("Could not allocate data address"));
+    throw formatted_error("Could not allocate data address");
 }
 
 void root::create_trees(root& extent_root) {
@@ -443,7 +443,7 @@ void root::create_trees(root& extent_root) {
             }
 
             if (sizeof(leaf_node) + i.second.len + sizeof(tree_header) > tree_size)
-                throw formatted_error(FMT_STRING("Item too large for tree."));
+                throw formatted_error("Item too large for tree.");
 
             ln->key = i.first;
             ln->size = i.second.len;
@@ -613,7 +613,7 @@ void root::write_trees(ntfs& dev) {
         }
 
         if (!found)
-            throw formatted_error(FMT_STRING("Could not find chunk containing address.")); // FIXME - include number
+            throw formatted_error("Could not find chunk containing address."); // FIXME - include number
     }
 }
 
@@ -678,7 +678,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root) {
     }
 
     if (sys_chunk_size > SYS_CHUNK_ARRAY_SIZE)
-        throw formatted_error(FMT_STRING("System chunk list was too long ({} > {}."), sys_chunk_size, SYS_CHUNK_ARRAY_SIZE);
+        throw formatted_error("System chunk list was too long ({} > {}).", sys_chunk_size, SYS_CHUNK_ARRAY_SIZE);
 
     total_used = data_size;
 
@@ -1387,7 +1387,7 @@ static bool split_runs(list<data_alloc>& runs, uint64_t offset, uint64_t length,
                 return true;
             }
 
-            throw formatted_error(FMT_STRING("Error assigning space to file. This can occur if the space bitmap has become corrupted. Run chkdsk and try again."));
+            throw formatted_error("Error assigning space to file. This can occur if the space bitmap has become corrupted. Run chkdsk and try again.");
         }
     }
 
@@ -1617,7 +1617,7 @@ static void clear_line() {
         SetConsoleCursorPosition(console, { 0, csbi.dwCursorPosition.Y });
     }
 #else
-    fmt::print(FMT_STRING("\33[2K"));
+    fmt::print("\33[2K");
     fflush(stdout);
 #endif
 }
@@ -1680,7 +1680,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         switch (att->TypeCode) {
             case ntfs_attribute::STANDARD_INFORMATION:
                 if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                    throw formatted_error(FMT_STRING("Error - STANDARD_INFORMATION is non-resident")); // FIXME - can this happen?
+                    throw formatted_error("Error - STANDARD_INFORMATION is non-resident"); // FIXME - can this happen?
 
                 standard_info = res_data;
             break;
@@ -1693,7 +1693,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        warnings.emplace_back(fmt::format(FMT_STRING("Skipping encrypted inode {:x} ({})"), inode - inode_offset, filename));
+                        warnings.emplace_back(fmt::format("Skipping encrypted inode {:x} ({})", inode - inode_offset, filename));
                         return true;
                     }
 
@@ -1742,7 +1742,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        warnings.emplace_back(fmt::format(FMT_STRING("Skipping encrypted ADS {}:{}"), filename, ads_name));
+                        warnings.emplace_back(fmt::format("Skipping encrypted ADS {}:{}", filename, ads_name));
 
                         break;
                     }
@@ -1753,7 +1753,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        warnings.emplace_back(fmt::format(FMT_STRING("Skipping compressed ADS {}:{}"), filename, ads_name)); // FIXME
+                        warnings.emplace_back(fmt::format("Skipping compressed ADS {}:{}", filename, ads_name)); // FIXME
 
                         break;
                     }
@@ -1772,7 +1772,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                 if (filename.empty())
                                     filename = f.get_filename();
 
-                                warnings.emplace_back(fmt::format(FMT_STRING("Skipping overly large ADS {}:{} ({} > {})"), filename, ads_name, att->Form.Resident.ValueLength, max_xattr_size));
+                                warnings.emplace_back(fmt::format("Skipping overly large ADS {}:{} ({} > {})", filename, ads_name, att->Form.Resident.ValueLength, max_xattr_size));
 
                                 break;
                             }
@@ -1786,7 +1786,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             if (filename.empty())
                                 filename = f.get_filename();
 
-                            warnings.emplace_back(fmt::format(FMT_STRING("Skipping overly large ADS {}:{} ({} > {})"), filename, ads_name, att->Form.Nonresident.FileSize, max_xattr_size));
+                            warnings.emplace_back(fmt::format("Skipping overly large ADS {}:{} ({} > {})", filename, ads_name, att->Form.Nonresident.FileSize, max_xattr_size));
 
                             break;
                         }
@@ -1816,16 +1816,16 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             case ntfs_attribute::FILE_NAME: {
                 if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                    throw formatted_error(FMT_STRING("Error - FILE_NAME is non-resident")); // FIXME - can this happen?
+                    throw formatted_error("Error - FILE_NAME is non-resident"); // FIXME - can this happen?
 
                 if (att->Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]))
-                    throw formatted_error(FMT_STRING("FILE_NAME was truncated"));
+                    throw formatted_error("FILE_NAME was truncated");
 
                 auto fn = reinterpret_cast<const FILE_NAME*>(res_data.data());
 
                 if (fn->Namespace != FILE_NAME_DOS) {
                     if (att->Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]) + (fn->FileNameLength * sizeof(char16_t)))
-                        throw formatted_error(FMT_STRING("FILE_NAME was truncated"));
+                        throw formatted_error("FILE_NAME was truncated");
 
                     auto name2 = convert.to_bytes(fn->FileName, fn->FileName + fn->FileNameLength);
 
@@ -1860,7 +1860,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             case ntfs_attribute::SYMBOLIC_LINK:
                 if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                    throw formatted_error(FMT_STRING("Error - SYMBOLIC_LINK is non-resident")); // FIXME - can this happen?
+                    throw formatted_error("Error - SYMBOLIC_LINK is non-resident"); // FIXME - can this happen?
 
                 reparse_point = res_data;
                 symlink.clear();
@@ -1879,7 +1879,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             if (filename.empty())
                                 filename = f.get_filename();
 
-                            warnings.emplace_back(fmt::format(FMT_STRING("Reparse point buffer of {} was truncated."), filename));
+                            warnings.emplace_back(fmt::format("Reparse point buffer of {} was truncated.", filename));
                         } else {
                             symlink = convert.to_bytes(&rpb->SymbolicLinkReparseBuffer.PathBuffer[rpb->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(char16_t)],
                                                        &rpb->SymbolicLinkReparseBuffer.PathBuffer[(rpb->SymbolicLinkReparseBuffer.PrintNameOffset + rpb->SymbolicLinkReparseBuffer.PrintNameLength) / sizeof(char16_t)]);
@@ -1981,7 +1981,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             if (filename.empty())
                 filename = f.get_filename();
 
-            throw formatted_error(FMT_STRING("{}: {}"), filename, e.what());
+            throw formatted_error("{}: {}", filename, e.what());
         }
     }
 
@@ -2037,48 +2037,48 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             if (filename.empty())
                 filename = f.get_filename();
 
-            fmt::print(stderr, FMT_STRING("Could not find SecurityId {} ({})\n"), si->SecurityId, filename);
+            fmt::print(stderr, "Could not find SecurityId {} ({})\n", si->SecurityId, filename);
         }
     }
 
     if (reparse_point.length() > sizeof(uint32_t) && *(uint32_t*)reparse_point.data() == IO_REPARSE_TAG_WOF) {
         try {
             if (reparse_point.length() < offsetof(reparse_point_header, DataBuffer)) {
-                throw formatted_error(FMT_STRING("IO_REPARSE_TAG_WOF reparse point buffer was {} bytes, expected at least {}."),
+                throw formatted_error("IO_REPARSE_TAG_WOF reparse point buffer was {} bytes, expected at least {}.",
                                       reparse_point.length(), offsetof(reparse_point_header, DataBuffer));
             }
 
             auto rph = (reparse_point_header*)reparse_point.data();
 
             if (reparse_point.length() < offsetof(reparse_point_header, DataBuffer) + rph->ReparseDataLength) {
-                throw formatted_error(FMT_STRING("IO_REPARSE_TAG_WOF reparse point buffer was {} bytes, expected {}."),
+                throw formatted_error("IO_REPARSE_TAG_WOF reparse point buffer was {} bytes, expected {}.",
                                       reparse_point.length(), offsetof(reparse_point_header, DataBuffer) + rph->ReparseDataLength);
             }
 
             if (rph->ReparseDataLength < sizeof(wof_external_info)) {
-                throw formatted_error(FMT_STRING("rph->ReparseDataLength was {} bytes, expected at least {}."),
+                throw formatted_error("rph->ReparseDataLength was {} bytes, expected at least {}.",
                                       rph->ReparseDataLength, sizeof(wof_external_info));
             }
 
             auto wofei = (wof_external_info*)rph->DataBuffer;
 
             if (wofei->Version != WOF_CURRENT_VERSION)
-                throw formatted_error(FMT_STRING("Unsupported WOF version {}."), wofei->Version);
+                throw formatted_error("Unsupported WOF version {}.", wofei->Version);
 
             if (wofei->Provider == WOF_PROVIDER_WIM)
-                throw formatted_error(FMT_STRING("Unsupported WOF provider WOF_PROVIDER_WIM."));
+                throw formatted_error("Unsupported WOF provider WOF_PROVIDER_WIM.");
             else if (wofei->Provider != WOF_PROVIDER_FILE)
-                throw formatted_error(FMT_STRING("Unsupported WOF provider {}."), wofei->Provider);
+                throw formatted_error("Unsupported WOF provider {}.", wofei->Provider);
 
             if (rph->ReparseDataLength < sizeof(wof_external_info) + sizeof(file_provider_external_info_v0)) {
-                throw formatted_error(FMT_STRING("rph->ReparseDataLength was {} bytes, expected {}."),
+                throw formatted_error("rph->ReparseDataLength was {} bytes, expected {}.",
                                       rph->ReparseDataLength, sizeof(wof_external_info) + sizeof(file_provider_external_info_v0));
             }
 
             auto fpei = *(file_provider_external_info_v0*)&wofei[1];
 
             if (fpei.Version != FILE_PROVIDER_CURRENT_VERSION) {
-                throw formatted_error(FMT_STRING("rph->FILE_PROVIDER_EXTERNAL_INFO_V0 Version was {}, expected {}."),
+                throw formatted_error("rph->FILE_PROVIDER_EXTERNAL_INFO_V0 Version was {}, expected {}.",
                                       fpei.Version, FILE_PROVIDER_CURRENT_VERSION);
             }
 
@@ -2103,13 +2103,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     break;
 
                 default:
-                    throw formatted_error(FMT_STRING("Unrecognized WOF compression algorithm {}"), fpei.Algorithm);
+                    throw formatted_error("Unrecognized WOF compression algorithm {}", fpei.Algorithm);
             }
         } catch (const exception& e) {
             if (filename.empty())
                 filename = f.get_filename();
 
-            fmt::print(stderr, FMT_STRING("{}: {}\n"), filename, e.what());
+            fmt::print(stderr, "{}: {}\n", filename, e.what());
         }
     }
 
@@ -2413,7 +2413,7 @@ static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_al
         }
 
         num++;
-        fmt::print(FMT_STRING("Processing inode {} / {} ({:1.1f}%)\r"), num, total, (float)num * 100.0f / (float)total);
+        fmt::print("Processing inode {} / {} ({:1.1f}%)\r", num, total, (float)num * 100.0f / (float)total);
         fflush(stdout);
 
         if (run.length == 1)
@@ -2424,7 +2424,7 @@ static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_al
         }
     }
 
-    fmt::print(FMT_STRING("\n"));
+    fmt::print("\n");
 }
 
 static void create_data_extent_items(root& extent_root, const list<data_alloc>& runs, uint32_t cluster_size, uint64_t image_subvol_id,
@@ -2574,7 +2574,7 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
             num++;
 
             if (num % 1000 == 0 || num == total) {
-                fmt::print(FMT_STRING("Calculating checksums {} / {} ({:1.1f}%)\r"), num, total, (float)num * 100.0f / (float)total);
+                fmt::print("Calculating checksums {} / {} ({:1.1f}%)\r", num, total, (float)num * 100.0f / (float)total);
                 fflush(stdout);
             }
         }
@@ -2582,7 +2582,7 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
         add_item(csum_root, EXTENT_CSUM_ID, TYPE_EXTENT_CSUM, (r.offset * cluster_size) + chunk_virt_offset, &csums[0], (uint16_t)(r.length * cluster_size * sizeof(uint32_t) / sector_size));
     }
 
-    fmt::print(FMT_STRING("\n"));
+    fmt::print("\n");
 }
 
 static void protect_data(ntfs& dev, list<data_alloc>& runs, uint64_t cluster_start, uint64_t cluster_end) {
@@ -2697,7 +2697,7 @@ static void calc_used_space(list<data_alloc>& runs, uint32_t cluster_size) {
             }
 
             if (!c)
-                throw formatted_error(FMT_STRING("Could not find chunk.")); // FIXME - include address
+                throw formatted_error("Could not find chunk."); // FIXME - include address
         }
 
         c->used += r.length * cluster_size;
@@ -2874,7 +2874,7 @@ static void convert(ntfs& dev) {
     create_data_extent_items(extent_root, runs, dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster,
                              image_subvol.id, image_inode);
 
-    fmt::print(FMT_STRING("Updating directory sizes\n"));
+    fmt::print("Updating directory sizes\n");
 
     for (auto& r : roots) {
         if (!r.dir_size.empty())
@@ -2968,12 +2968,12 @@ int main(int argc, char* argv[]) {
 
     try {
         if (argc < 2 || (argc == 2 && (!strcmp(argv[1], "--help") || !strcmp(argv[1], "/?")))) {
-            fmt::print(FMT_STRING("Usage: ntfs2btrfs device\n"));
+            fmt::print("Usage: ntfs2btrfs device\n");
             return 1;
         }
 
         if (argc == 2 && !strcmp(argv[1], "--version")) {
-            fmt::print(FMT_STRING("ntfs2btrfs " PROJECT_VER "\n"));
+            fmt::print("ntfs2btrfs " PROJECT_VER "\n");
             return 1;
         }
 

@@ -49,7 +49,7 @@ static string lznt1_decompress_chunk(string_view data) {
                     data = data.substr(1);
                 } else {
                     if (data.length() < sizeof(uint16_t))
-                        throw formatted_error(FMT_STRING("Compressed chunk was {} bytes, expected at least 2."), data.length());
+                        throw formatted_error("Compressed chunk was {} bytes, expected at least 2.", data.length());
 
                     // See https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-xca/90fc6a28-f627-4ee5-82ce-445a6cf98b22
 
@@ -99,7 +99,7 @@ string lznt1_decompress(string_view compdata, uint32_t size) {
 
     while (true) {
         if (compdata.length() < sizeof(uint16_t))
-            throw formatted_error(FMT_STRING("compdata was {} bytes, expected at least 2."), compdata.length());
+            throw formatted_error("compdata was {} bytes, expected at least 2.", compdata.length());
 
         auto h = *(uint16_t*)compdata.data();
 
@@ -111,12 +111,12 @@ string lznt1_decompress(string_view compdata, uint32_t size) {
         auto sig = (h & 0x7000) >> 12;
 
         if (sig != 3)
-            throw formatted_error(FMT_STRING("Compression signature was {}, expected 3."), sig);
+            throw formatted_error("Compression signature was {}, expected 3.", sig);
 
         auto len = (uint32_t)(((uint64_t)h & 0xfff) + 1);
 
         if (compdata.length() < len)
-            throw formatted_error(FMT_STRING("compdata was {} bytes, expected at least {}."), compdata.length(), len);
+            throw formatted_error("compdata was {} bytes, expected at least {}.", compdata.length(), len);
 
         auto data = string_view(compdata.data(), len);
 
@@ -152,7 +152,7 @@ string do_lzx_decompress(const string_view& compdata, uint32_t size) {
     auto ctx = lzx_allocate_decompressor(LZX_CHUNK_SIZE);
 
     if (!ctx)
-        throw formatted_error(FMT_STRING("lzx_allocate_decompressor returned NULL."));
+        throw formatted_error("lzx_allocate_decompressor returned NULL.");
 
     uint64_t num_chunks = (size + LZX_CHUNK_SIZE - 1) / LZX_CHUNK_SIZE;
     auto offsets = (uint32_t*)compdata.data();
@@ -184,7 +184,7 @@ string do_lzx_decompress(const string_view& compdata, uint32_t size) {
 
             if (err != 0) {
                 lzx_free_decompressor(ctx);
-                throw formatted_error(FMT_STRING("lzx_decompress returned {}."), err);
+                throw formatted_error("lzx_decompress returned {}.", err);
             }
         }
     }
@@ -198,7 +198,7 @@ string do_xpress_decompress(const string_view& compdata, uint32_t size, uint32_t
     auto ctx = xpress_allocate_decompressor();
 
     if (!ctx)
-        throw formatted_error(FMT_STRING("xpress_allocate_decompressor returned NULL."));
+        throw formatted_error("xpress_allocate_decompressor returned NULL.");
 
     uint64_t num_chunks = (size + chunk_size - 1) / chunk_size;
     auto offsets = (uint32_t*)compdata.data();
@@ -230,7 +230,7 @@ string do_xpress_decompress(const string_view& compdata, uint32_t size, uint32_t
 
             if (err != 0) {
                 xpress_free_decompressor(ctx);
-                throw formatted_error(FMT_STRING("xpress_decompress returned {}."), err);
+                throw formatted_error("xpress_decompress returned {}.", err);
             }
         }
     }

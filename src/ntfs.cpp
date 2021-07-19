@@ -33,12 +33,12 @@ void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int s
     uint8_t* ptr;
 
     if (length % sector_size != 0)
-        throw formatted_error(FMT_STRING("Length was not a multiple of sector_size."));
+        throw formatted_error("Length was not a multiple of sector_size.");
 
     sectors = length / sector_size;
 
     if (header->UpdateSequenceArraySize < sectors + 1)
-        throw formatted_error(FMT_STRING("UpdateSequenceArraySize was {:x}, expected {:x}"), header->UpdateSequenceArraySize, sectors + 1);
+        throw formatted_error("UpdateSequenceArraySize was {:x}, expected {:x}", header->UpdateSequenceArraySize, sectors + 1);
 
     seq = (uint16_t*)((uint8_t*)header + header->UpdateSequenceArrayOffset);
 
@@ -46,7 +46,7 @@ void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int s
 
     for (unsigned int i = 0; i < sectors; i++) {
         if (*(uint16_t*)ptr != seq[0])
-            throw formatted_error(FMT_STRING("Update sequence mismatch."));
+            throw formatted_error("Update sequence mismatch.");
 
         *(uint16_t*)ptr = seq[i + 1];
 
@@ -69,7 +69,7 @@ ntfs_file::ntfs_file(ntfs& dev, uint64_t inode) : dev(dev), inode(inode) {
     file_record = reinterpret_cast<FILE_RECORD_SEGMENT_HEADER*>(file_record_buf.data());
 
     if (file_record->MultiSectorHeader.Signature != NTFS_FILE_SIGNATURE) {
-        throw formatted_error(FMT_STRING("Invalid file signature ({:08x}, expected {:08x})."),
+        throw formatted_error("Invalid file signature ({:08x}, expected {:08x}).",
                               file_record->MultiSectorHeader.Signature, NTFS_FILE_SIGNATURE);
     }
 
@@ -103,10 +103,10 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
         stream++;
 
         if (v > 8)
-            throw formatted_error(FMT_STRING("Error: v > 8"));
+            throw formatted_error("Error: v > 8");
 
         if (l > 8)
-            throw formatted_error(FMT_STRING("Error: l > 8"));
+            throw formatted_error("Error: l > 8");
 
         // FIXME - do we need to make sure that int64_t pointers don't go past end of buffer?
 
@@ -225,10 +225,10 @@ string ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute typ
             return true;
 
         if (att->Flags & ATTRIBUTE_FLAG_ENCRYPTED)
-            throw formatted_error(FMT_STRING("Cannot read encrypted attribute"));
+            throw formatted_error("Cannot read encrypted attribute");
 
         if (att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK)
-            throw formatted_error(FMT_STRING("FIXME - handle reading compressed attribute")); // FIXME
+            throw formatted_error("FIXME - handle reading compressed attribute"); // FIXME
 
         if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
             ret = read_nonresident_attribute(offset, length, att);
@@ -251,7 +251,7 @@ string ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute typ
     });
 
     if (!found)
-        throw formatted_error(FMT_STRING("Attribute not found."));
+        throw formatted_error("Attribute not found.");
 
     return ret;
 }
@@ -264,7 +264,7 @@ list<mapping> ntfs_file::read_mappings(enum ntfs_attribute type, const u16string
             return true;
 
         if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM)
-            throw formatted_error(FMT_STRING("Attribute is resident"));
+            throw formatted_error("Attribute is resident");
 
         uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
 
@@ -298,7 +298,7 @@ ntfs::ntfs(const string& fn) {
     if (h == INVALID_HANDLE_VALUE) {
         auto le = GetLastError();
 
-        throw formatted_error(FMT_STRING("Could not open {} (error {})."), fn, le);
+        throw formatted_error("Could not open {} (error {}).", fn, le);
     }
 
     if (drive) {
@@ -307,7 +307,7 @@ ntfs::ntfs(const string& fn) {
 
             CloseHandle(h);
 
-            throw formatted_error(FMT_STRING("Could not lock volume (error {})."), le);
+            throw formatted_error("Could not lock volume (error {}).", le);
         }
     }
 
@@ -315,7 +315,7 @@ ntfs::ntfs(const string& fn) {
     f = fstream(fn, ios_base::in | ios_base::out | ios::binary);
 
     if (!f.good())
-        throw formatted_error(FMT_STRING("Failed to open {}."), fn);
+        throw formatted_error("Failed to open {}.", fn);
 #endif
 
     // read NTFS_BOOT_SECTOR
@@ -326,7 +326,7 @@ ntfs::ntfs(const string& fn) {
 
     // make sure is NTFS
     if (memcmp(boot_sector->FsName, NTFS_FS_NAME, sizeof(NTFS_FS_NAME) - 1))
-        throw formatted_error(FMT_STRING("Device was not an NTFS volume."));
+        throw formatted_error("Device was not an NTFS volume.");
 
     if (boot_sector->ClustersPerMFTRecord < 0)
         file_record_size = 1ull << -boot_sector->ClustersPerMFTRecord;
@@ -343,10 +343,10 @@ ntfs::ntfs(const string& fn) {
         auto vi = reinterpret_cast<VOLUME_INFORMATION*>(vi_str.data());
 
         if (vi->MajorVersion > 3 || (vi->MajorVersion == 3 && vi->MinorVersion > 1))
-            throw formatted_error(FMT_STRING("Unsupported NTFS version {}.{}."), vi->MajorVersion, vi->MinorVersion);
+            throw formatted_error("Unsupported NTFS version {}.{}.", vi->MajorVersion, vi->MinorVersion);
 
         if (vi->Flags & NTFS_VOLUME_DIRTY)
-            throw formatted_error(FMT_STRING("Cannot convert volume with dirty bit set."));
+            throw formatted_error("Cannot convert volume with dirty bit set.");
     } catch (...) {
         delete mft;
         throw;
@@ -415,7 +415,7 @@ static bool btree_search(index_root* ir, const list<mapping>& mappings, index_no
                 auto rec = reinterpret_cast<index_record*>(data.data());
 
                 if (rec->MultiSectorHeader.Signature != INDEX_RECORD_MAGIC)
-                    throw formatted_error(FMT_STRING("Index record magic was not INDX."));
+                    throw formatted_error("Index record magic was not INDX.");
 
                 process_fixups(&rec->MultiSectorHeader, ir->bytes_per_index_record, dev.boot_sector->BytesPerSector);
 
@@ -460,7 +460,7 @@ string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev) {
     auto sde2 = secure.read(sde->offset, sde->length, ntfs_attribute::DATA, u"$SDS");
 
     if (memcmp(sde, sde2.data(), sizeof(sd_entry)))
-        throw formatted_error(FMT_STRING("SD headers do not match."));
+        throw formatted_error("SD headers do not match.");
 
     sd_list[id] = sde2.substr(sizeof(sd_entry));
 
@@ -485,7 +485,7 @@ static void walk_btree(index_root* ir, const list<mapping>& mappings, index_node
             auto rec = reinterpret_cast<index_record*>(data.data());
 
             if (rec->MultiSectorHeader.Signature != INDEX_RECORD_MAGIC)
-                throw formatted_error(FMT_STRING("Index record magic was not INDX."));
+                throw formatted_error("Index record magic was not INDX.");
 
             process_fixups(&rec->MultiSectorHeader, ir->bytes_per_index_record, dev.boot_sector->BytesPerSector);
 
@@ -753,13 +753,13 @@ void ntfs::seek(uint64_t pos) {
     if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN)) {
         auto le = GetLastError();
 
-        throw formatted_error(FMT_STRING("SetFilePointerEx failed (error {})."), le);
+        throw formatted_error("SetFilePointerEx failed (error {}).", le);
     }
 #else
     f.seekg(pos);
 
     if (f.fail())
-        throw formatted_error(FMT_STRING("Error seeking to {:x}."), pos);
+        throw formatted_error("Error seeking to {:x}.", pos);
 #endif
 }
 
@@ -770,7 +770,7 @@ void ntfs::read(char* buf, size_t length) {
     if (!ReadFile(h, buf, (DWORD)length, &read, nullptr)) {
         auto le = GetLastError();
 
-        throw formatted_error(FMT_STRING("ReadFile failed (error {})."), le);
+        throw formatted_error("ReadFile failed (error {}).", le);
     }
 #else
     auto pos = f.tellg();
@@ -778,7 +778,7 @@ void ntfs::read(char* buf, size_t length) {
     f.read(buf, length);
 
     if (f.fail())
-        throw formatted_error(FMT_STRING("Error reading {:x} bytes at {:x}."), length, pos);
+        throw formatted_error("Error reading {:x} bytes at {:x}.", length, pos);
 #endif
 }
 
@@ -789,7 +789,7 @@ void ntfs::write(const char* buf, size_t length) {
     if (!WriteFile(h, buf, (DWORD)length, &written, nullptr)) {
         auto le = GetLastError();
 
-        throw formatted_error(FMT_STRING("WriteFile failed (error {})."), le);
+        throw formatted_error("WriteFile failed (error {}).", le);
     }
 #else
     auto pos = f.tellg();
@@ -797,6 +797,6 @@ void ntfs::write(const char* buf, size_t length) {
     f.write(buf, length);
 
     if (f.fail())
-        throw formatted_error(FMT_STRING("Error writing {:x} bytes at {:x}."), length, pos);
+        throw formatted_error("Error writing {:x} bytes at {:x}.", length, pos);
 #endif
 }
