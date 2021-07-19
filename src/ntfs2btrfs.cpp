@@ -1895,6 +1895,52 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 }
             break;
 
+            case ntfs_attribute::SECURITY_DESCRIPTOR: {
+                auto max_sd_size = (uint32_t)(tree_size - sizeof(tree_header) - sizeof(leaf_node) - offsetof(DIR_ITEM, name[0]) - sizeof(EA_NTACL) + 1);
+
+                if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
+                    if (att->Form.Resident.ValueLength > max_sd_size) {
+                        clear_line();
+
+                        if (filename.empty())
+                            filename = f.get_filename();
+
+                        warnings.emplace_back(fmt::format("Skipping overly large SD for {} ({} > {})", filename, att->Form.Resident.ValueLength, max_sd_size));
+
+                        break;
+                    }
+
+                    sd = res_data;
+                } else {
+                    if (att->Form.Nonresident.FileSize > max_sd_size) {
+                        clear_line();
+
+                        if (filename.empty())
+                            filename = f.get_filename();
+
+                        warnings.emplace_back(fmt::format("Skipping overly large SD for {} ({} > {})", filename, att->Form.Nonresident.FileSize, max_sd_size));
+
+                        break;
+                    }
+
+                    list<mapping> sd_mappings;
+
+                    read_nonresident_mappings(att, sd_mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
+
+                    sd.resize((size_t)sector_align(att->Form.Nonresident.FileSize, cluster_size));
+                    memset(sd.data(), 0, sd.length());
+
+                    for (const auto& m : sd_mappings) {
+                        dev.seek(m.lcn * cluster_size);
+                        dev.read(sd.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
+                    }
+
+                    sd.resize((size_t)att->Form.Nonresident.FileSize);
+                }
+
+                break;
+            }
+
             default:
             break;
         }
@@ -2026,7 +2072,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         ii.st_ctime = win_time_to_unix(si->ChangeTime);
     }
 
-    if (standard_info.length() >= offsetof(STANDARD_INFORMATION, QuotaCharged)) {
+    if (sd.empty() && standard_info.length() >= offsetof(STANDARD_INFORMATION, QuotaCharged)) {
         auto si = reinterpret_cast<const STANDARD_INFORMATION*>(standard_info.data());
 
         sd = find_sd(si->SecurityId, secure, dev);
