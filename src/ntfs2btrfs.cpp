@@ -2272,18 +2272,16 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         free(ed);
     } else if (!inline_data.empty()) {
         if (inline_data.length() > max_inline) {
-            size_t extlen = offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2);
-            auto ed = (EXTENT_DATA*)malloc(extlen);
-            if (!ed)
-                throw bad_alloc();
+            vector<uint8_t> buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
 
-            auto ed2 = (EXTENT_DATA2*)&ed->data;
+            auto& ed = *(EXTENT_DATA*)buf.data();
+            auto& ed2 = *(EXTENT_DATA2*)&ed.data;
 
-            ed->generation = 1;
-            ed->compression = 0; // FIXME - recompress?
-            ed->encryption = 0;
-            ed->encoding = 0;
-            ed->type = EXTENT_TYPE_REGULAR;
+            ed.generation = 1;
+            ed.compression = 0; // FIXME - recompress?
+            ed.encryption = 0;
+            ed.encoding = 0;
+            ed.type = EXTENT_TYPE_REGULAR;
 
             // round to nearest sector, and zero end
 
@@ -2298,57 +2296,50 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             if (vdl < inline_data.length())
                 memset(inline_data.data() + vdl, 0, (size_t)(inline_data.length() - vdl));
 
-            try {
-                uint64_t pos = 0;
+            uint64_t pos = 0;
 
-                while (!inline_data.empty()) {
-                    uint64_t len, lcn, cl;
-                    bool inserted = false;
+            while (!inline_data.empty()) {
+                uint64_t len, lcn, cl;
+                bool inserted = false;
 
-                    if (inline_data.length() >= max_extent_size)
-                        len = max_extent_size;
-                    else
-                        len = inline_data.length();
+                if (inline_data.length() >= max_extent_size)
+                    len = max_extent_size;
+                else
+                    len = inline_data.length();
 
-                    ed->decoded_size = ed2->size = ed2->num_bytes = len;
-                    ii.st_blocks += ed->decoded_size;
+                ed.decoded_size = ed2.size = ed2.num_bytes = len;
+                ii.st_blocks += ed.decoded_size;
 
-                    ed2->address = allocate_data(len, true);
-                    ed2->offset = 0;
+                ed2.address = allocate_data(len, true);
+                ed2.offset = 0;
 
-                    dev.seek(ed2->address - chunk_virt_offset);
-                    dev.write(inline_data.data(), (size_t)len);
+                dev.seek(ed2.address - chunk_virt_offset);
+                dev.write(inline_data.data(), (size_t)len);
 
-                    add_item(r, inode, TYPE_EXTENT_DATA, pos, ed, (uint16_t)extlen);
+                add_item(r, inode, TYPE_EXTENT_DATA, pos, &ed, (uint16_t)buf.size());
 
-                    lcn = (ed2->address - chunk_virt_offset) / cluster_size;
-                    cl = len / cluster_size;
+                lcn = (ed2.address - chunk_virt_offset) / cluster_size;
+                cl = len / cluster_size;
 
-                    for (auto it = runs.begin(); it != runs.end(); it++) {
-                        auto& r = *it;
+                for (auto it = runs.begin(); it != runs.end(); it++) {
+                    auto& r = *it;
 
-                        if (r.offset >= lcn + cl) {
-                            runs.emplace(it, lcn, cl, inode, pos / cluster_size, false, true);
-                            inserted = true;
-                            break;
-                        }
-                    }
-
-                    if (!inserted)
-                        runs.emplace_back(lcn, cl, inode, pos / cluster_size, false, true);
-
-                    if (inline_data.length() > len) {
-                        pos += len;
-                        inline_data = inline_data.substr((size_t)len);
-                    } else
+                    if (r.offset >= lcn + cl) {
+                        runs.emplace(it, lcn, cl, inode, pos / cluster_size, false, true);
+                        inserted = true;
                         break;
+                    }
                 }
-            } catch (...) {
-                free(ed);
-                throw;
-            }
 
-            free(ed);
+                if (!inserted)
+                    runs.emplace_back(lcn, cl, inode, pos / cluster_size, false, true);
+
+                if (inline_data.length() > len) {
+                    pos += len;
+                    inline_data = inline_data.substr((size_t)len);
+                } else
+                    break;
+            }
         } else {
             size_t extlen = offsetof(EXTENT_DATA, data[0]) + inline_data.length();
             auto ed = (EXTENT_DATA*)malloc(extlen);
