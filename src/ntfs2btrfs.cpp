@@ -2663,7 +2663,9 @@ static void protect_superblocks(ntfs& dev, list<data_alloc>& runs) {
         uint64_t cluster_start = (superblock_addrs[i] - (superblock_addrs[i] % stripe_length)) / cluster_size;
         uint64_t cluster_end = sector_align(superblock_addrs[i] - (superblock_addrs[i] % stripe_length) + stripe_length, cluster_size) / cluster_size;
 
-        protect_data(dev, runs, cluster_start, cluster_end);
+        for (uint64_t j = cluster_start; j < cluster_end; j++) {
+            protect_data(dev, runs, j, j + 1);
+        }
 
         i++;
     }
