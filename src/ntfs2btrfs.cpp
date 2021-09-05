@@ -2375,14 +2375,21 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     if (c.has_value()) {
                         compdata = c.value();
                         ed.compression = compression;
+
+                        ii.flags |= BTRFS_INODE_COMPRESS;
                     } else // incompressible
                         ed.compression = BTRFS_COMPRESSION_NONE;
 
-                    // FIXME - if first part of file incompressible, give up on rest and add nocomp flag
+                    // if first part of file incompressible, give up on rest and add nocomp flag
+                    if (pos == 0 && ed.compression == BTRFS_COMPRESSION_NONE) {
+                        ii.flags |= BTRFS_INODE_NOCOMPRESS;
+                        compression = BTRFS_COMPRESSION_NONE;
+                        len = min(max_extent_size, inline_data.length());
+                    }
+
+                    // FIXME - set xattr for compression type?
                 }
 #endif
-
-                // FIXME - add comp flag to inode if compressed
 
                 ed.decoded_size = ed2.num_bytes = len;
                 ed2.size = ed.compression == BTRFS_COMPRESSION_NONE ? len : compdata.length();
