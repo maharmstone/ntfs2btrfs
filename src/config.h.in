@@ -1,3 +1,4 @@
 #pragma once
 
 #define PROJECT_VER  "@PROJECT_VERSION@"
+#cmakedefine WITH_ZLIB 1

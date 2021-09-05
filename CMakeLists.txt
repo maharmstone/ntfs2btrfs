@@ -7,12 +7,18 @@ endif()
 
 project(ntfs2btrfs VERSION 20210523)
 
+option(WITH_ZLIB "Include zlib support" ON)
+
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(fmt REQUIRED)
+
+if(WITH_ZLIB)
+    find_package(ZLIB REQUIRED)
+endif()
 
 set(SRC_FILES src/ntfs2btrfs.cpp
     src/ntfs.cpp
@@ -37,6 +43,10 @@ set_property(TARGET ntfs2btrfs PROPERTY
     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 target_link_libraries(ntfs2btrfs fmt::fmt-header-only)
+
+if(WITH_ZLIB)
+    target_link_libraries(ntfs2btrfs ZLIB::ZLIB)
+endif()
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 

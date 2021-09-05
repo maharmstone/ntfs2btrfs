@@ -35,12 +35,17 @@
 #include <random>
 #include <locale>
 #include <codecvt>
+#include <optional>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
 #include "config.h"
+
+#ifdef WITH_ZLIB
+#include <zlib.h>
+#endif
 
 using namespace std;
 
@@ -68,6 +73,7 @@ static const uint64_t inode_offset = 0x101;
 
 static const uint16_t max_inline = 2048;
 static const uint64_t max_extent_size = 0x8000000; // 128 MB
+static const uint64_t max_comp_extent_size = 0x20000; // 128 KB
 
 #define EA_NTACL "security.NTACL"
 #define EA_NTACL_HASH 0x45922146
@@ -1649,6 +1655,54 @@ static bool string_eq_ci(const string_view& s1, const string_view& s2) {
     return true;
 }
 
+#ifdef WITH_ZLIB
+static optional<string> try_compress(const string_view& data, uint32_t cluster_size) {
+    z_stream c_stream;
+    int ret;
+    string out(data.length(), 0);
+
+    c_stream.zalloc = Z_NULL;
+    c_stream.zfree = Z_NULL;
+    c_stream.opaque = (voidpf)0;
+
+    ret = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+
+    if (ret != Z_OK)
+        throw formatted_error("deflateInit returned {}", ret);
+
+    c_stream.next_in = (uint8_t*)data.data();
+    c_stream.avail_in = (unsigned int)data.length();
+
+    c_stream.next_out = (uint8_t*)out.data();
+    c_stream.avail_out = (unsigned int)out.length();
+
+    do {
+        ret = deflate(&c_stream, Z_FINISH);
+
+        if (ret != Z_OK && ret != Z_STREAM_END) {
+            deflateEnd(&c_stream);
+            throw formatted_error("deflate returned {}", ret);
+        }
+
+        if (c_stream.avail_in == 0 || c_stream.avail_out == 0)
+            break;
+    } while (ret != Z_STREAM_END);
+
+    deflateEnd(&c_stream);
+
+    if (c_stream.avail_in > 0) // compressed version would be longer than uncompressed
+        return nullopt;
+
+    if (c_stream.total_out > data.length() - cluster_size) // space saving less than one sector
+        return nullopt;
+
+    // round to sector, and zero end
+    out.resize((c_stream.total_out + cluster_size - 1) & ~(cluster_size - 1), 0);
+
+    return out;
+}
+#endif
+
 static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir, list<data_alloc>& runs,
                       ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist) {
     INODE_ITEM ii;
@@ -2273,12 +2327,19 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     } else if (!inline_data.empty()) {
         if (inline_data.length() > max_inline) {
             vector<uint8_t> buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
+            uint8_t compression;
+
+#ifdef WITH_ZLIB
+            compression = BTRFS_COMPRESSION_ZLIB; // FIXME - command line option
+#else
+            compression = BTRFS_COMPRESSION_NONE;
+#endif
 
             auto& ed = *(EXTENT_DATA*)buf.data();
             auto& ed2 = *(EXTENT_DATA2*)&ed.data;
 
             ed.generation = 1;
-            ed.compression = 0; // FIXME - recompress?
+            ed.compression = BTRFS_COMPRESSION_NONE;
             ed.encryption = 0;
             ed.encoding = 0;
             ed.type = EXTENT_TYPE_REGULAR;
@@ -2301,25 +2362,46 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             while (!inline_data.empty()) {
                 uint64_t len, lcn, cl;
                 bool inserted = false;
+                string compdata;
 
-                if (inline_data.length() >= max_extent_size)
-                    len = max_extent_size;
-                else
-                    len = inline_data.length();
+                if (compression == BTRFS_COMPRESSION_NONE)
+                    len = min(max_extent_size, inline_data.length());
+#ifdef WITH_ZLIB
+                else {
+                    len = min(max_comp_extent_size, inline_data.length());
 
-                ed.decoded_size = ed2.size = ed2.num_bytes = len;
+                    auto c = try_compress(string_view(inline_data).substr(0, len), cluster_size);
+
+                    if (c.has_value()) {
+                        compdata = c.value();
+                        ed.compression = compression;
+                    } else // incompressible
+                        ed.compression = BTRFS_COMPRESSION_NONE;
+
+                    // FIXME - if first part of file incompressible, give up on rest and add nocomp flag
+                }
+#endif
+
+                // FIXME - add comp flag to inode if compressed
+
+                ed.decoded_size = ed2.num_bytes = len;
+                ed2.size = ed.compression == BTRFS_COMPRESSION_NONE ? len : compdata.length();
                 ii.st_blocks += ed.decoded_size;
 
                 ed2.address = allocate_data(len, true);
                 ed2.offset = 0;
 
                 dev.seek(ed2.address - chunk_virt_offset);
-                dev.write(inline_data.data(), (size_t)len);
+
+                if (ed.compression == BTRFS_COMPRESSION_NONE)
+                    dev.write(inline_data.data(), (size_t)len);
+                else
+                    dev.write(compdata.data(), compdata.length());
 
                 add_item(r, inode, TYPE_EXTENT_DATA, pos, &ed, (uint16_t)buf.size());
 
                 lcn = (ed2.address - chunk_virt_offset) / cluster_size;
-                cl = len / cluster_size;
+                cl = ed2.size / cluster_size;
 
                 for (auto it = runs.begin(); it != runs.end(); it++) {
                     auto& r = *it;
@@ -2345,6 +2427,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             auto ed = (EXTENT_DATA*)malloc(extlen);
             if (!ed)
                 throw bad_alloc();
+
+            // FIXME - compress inline extents?
 
             ed->generation = 1;
             ed->decoded_size = inline_data.length();
