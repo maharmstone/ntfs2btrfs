@@ -1704,7 +1704,7 @@ static optional<string> try_compress(const string_view& data, uint32_t cluster_s
 #endif
 
 static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir, list<data_alloc>& runs,
-                      ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist) {
+                      ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist, uint8_t opt_compression) {
     INODE_ITEM ii;
     uint64_t file_size = 0;
     list<mapping> mappings;
@@ -2327,13 +2327,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     } else if (!inline_data.empty()) {
         if (inline_data.length() > max_inline) {
             vector<uint8_t> buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
-            uint8_t compression;
-
-#ifdef WITH_ZLIB
-            compression = BTRFS_COMPRESSION_ZLIB; // FIXME - command line option
-#else
-            compression = BTRFS_COMPRESSION_NONE;
-#endif
+            uint8_t compression = opt_compression;
 
             auto& ed = *(EXTENT_DATA*)buf.data();
             auto& ed2 = *(EXTENT_DATA2*)&ed.data;
@@ -2511,7 +2505,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     }
 }
 
-static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_alloc>& runs, ntfs_file& secure) {
+static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_alloc>& runs, ntfs_file& secure,
+                          uint8_t compression) {
     list<space> inodes;
     list<uint64_t> skiplist;
     uint64_t total = 0, num = 0;
@@ -2532,7 +2527,7 @@ static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_al
 
         try {
             if (ntfs_inode >= first_ntfs_inode)
-                add_inode(r, inode, ntfs_inode, dir, runs, secure, dev, skiplist);
+                add_inode(r, inode, ntfs_inode, dir, runs, secure, dev, skiplist, compression);
             else if (ntfs_inode != NTFS_ROOT_DIR_INODE)
                 populate_skip_list(dev, ntfs_inode, skiplist);
         } catch (...) {
@@ -2901,7 +2896,7 @@ static void update_dir_sizes(root& r) {
     }
 }
 
-static void convert(ntfs& dev) {
+static void convert(ntfs& dev, uint8_t compression) {
     uint32_t sector_size = 0x1000; // FIXME
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
     list<data_alloc> runs;
@@ -2993,7 +2988,7 @@ static void convert(ntfs& dev) {
     {
         ntfs_file secure(dev, NTFS_SECURE_INODE);
 
-        create_inodes(fstree_root, mftbmp, dev, runs, secure);
+        create_inodes(fstree_root, mftbmp, dev, runs, secure, compression);
     }
 
     create_image(image_subvol, dev, runs, image_inode);
@@ -3072,7 +3067,7 @@ static void convert(ntfs& dev) {
 }
 
 #if defined(__i386__) || defined(__x86_64__)
-static void check_cpu() {
+static void check_cpu() noexcept {
 #ifndef _MSC_VER
     unsigned int cpuInfo[4];
 
@@ -3091,27 +3086,92 @@ static void check_cpu() {
 }
 #endif
 
+static uint8_t parse_compression_type(const string_view& s) {
+    if (s == "none")
+        return BTRFS_COMPRESSION_NONE;
+    else if (s == "zlib")
+        return BTRFS_COMPRESSION_ZLIB;
+    else
+        throw formatted_error("Unrecognized compression type {}.", s);
+}
+
+static vector<string_view> read_args(int argc, char* argv[]) {
+    vector<string_view> ret;
+
+    for (int i = 0; i < argc; i++) {
+        ret.emplace_back(argv[i]);
+    }
+
+    return ret;
+}
+
 int main(int argc, char* argv[]) {
-#if defined(__i386__) || defined(__x86_64__)
-    check_cpu();
-#endif
-
     try {
-        if (argc < 2 || (argc == 2 && (!strcmp(argv[1], "--help") || !strcmp(argv[1], "/?")))) {
-            fmt::print("Usage: ntfs2btrfs device\n");
-            return 1;
-        }
+        auto args = read_args(argc, argv);
 
-        if (argc == 2 && !strcmp(argv[1], "--version")) {
+        if (args.size() == 2 && args[1] == "--version") {
             fmt::print("ntfs2btrfs " PROJECT_VER "\n");
             return 1;
         }
 
-        string fn = argv[1];
+        if (args.size() < 2 || (args.size() == 2 && (args[1] == "--help" || args[1] == "/?"))) {
+            fmt::print(R"(Usage: ntfs2btrfs [OPTION]... device
+Convert an NTFS filesystem to Btrfs.
+
+  -c, --compress=ALGO        recompress compressed files; ALGO can be 'zlib'
+                               or 'none'. Defaults to 'zlib' if compiled in or
+                               'none' otherwise.
+)");
+            return 1;
+        }
+
+        string fn;
+        uint8_t compression;
+
+#ifdef WITH_ZLIB
+        compression = BTRFS_COMPRESSION_ZLIB;
+#else
+        compression = BTRFS_COMPRESSION_NONE;
+#endif
+
+        for (size_t i = 1; i < args.size(); i++) {
+            const auto& arg = args[i];
+
+            if (!arg.empty() && arg[0] == '-') {
+                if (arg == "-c") {
+                    if (i == args.size() - 1)
+                        throw runtime_error("No value given for -c option.");
+
+                    compression = parse_compression_type(args[i+1]);
+                    i++;
+                } else if (arg.substr(0, 11) == "--compress=")
+                    compression = parse_compression_type(arg.substr(11));
+                else
+                    throw formatted_error("Unrecognized option {}.", arg);
+
+            } else {
+                if (!fn.empty())
+                    throw runtime_error("Multiple devices given.");
+
+                fn = arg;
+            }
+        }
+
+        if (fn.empty())
+            throw runtime_error("No device given.");
+
+#ifndef WITH_ZLIB
+        if (compression == BTRFS_COMPRESSION_ZLIB)
+            throw runtime_error("Zlib compression not compiled in.");
+#endif
+
+#if defined(__i386__) || defined(__x86_64__)
+        check_cpu();
+#endif
 
         ntfs dev(fn);
 
-        convert(dev);
+        convert(dev, compression);
     } catch (const exception& e) {
         cerr << e.what() << endl;
         return 1;
