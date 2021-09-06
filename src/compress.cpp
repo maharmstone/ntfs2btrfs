@@ -16,10 +16,13 @@
  * along with Ntfs2btrfs. If not, see <https://www.gnu.org/licenses/>. */
 
 #include "ntfs2btrfs.h"
-#include "config.h"
 
 #ifdef WITH_ZLIB
 #include <zlib.h>
+#endif
+
+#ifdef WITH_LZO
+#include <lzo/lzo1x.h>
 #endif
 
 using namespace std;
@@ -69,5 +72,64 @@ optional<string> zlib_compress(const string_view& data, uint32_t cluster_size) {
     out.resize((c_stream.total_out + cluster_size - 1) & ~(cluster_size - 1), 0);
 
     return out;
+}
+#endif
+
+#ifdef WITH_LZO
+static __inline size_t lzo_max_outlen(size_t inlen) {
+    return inlen + (inlen / 16) + 64 + 3; // formula comes from LZO.FAQ
+}
+
+optional<string> lzo_compress(const string_view& data, uint32_t cluster_size) {
+    size_t num_pages;
+
+    num_pages = data.length() / cluster_size;
+
+    // Four-byte overall header
+    // Another four-byte header page
+    // Each page has a maximum size of lzo_max_outlen(cluster_size)
+    // Plus another four bytes for possible padding
+    string outbuf(sizeof(uint32_t) + ((lzo_max_outlen(cluster_size) + (2 * sizeof(uint32_t))) * num_pages), 0);
+    string wrkmem(LZO1X_MEM_COMPRESS, 0);
+
+    auto out_size = (uint32_t*)outbuf.data();
+    *out_size = sizeof(uint32_t);
+
+    auto in = (lzo_bytep)data.data();
+    auto out = (lzo_bytep)(outbuf.data() + (2 * sizeof(uint32_t)));
+
+    for (unsigned int i = 0; i < num_pages; i++) {
+        auto pagelen = (uint32_t*)(out - sizeof(uint32_t));
+        lzo_uint outlen;
+
+        auto ret = lzo1x_1_compress(in, cluster_size, out, &outlen, wrkmem.data());
+        if (ret != LZO_E_OK)
+            throw formatted_error("lzo1x_1_compress returned {}", ret);
+
+        *pagelen = (uint32_t)outlen;
+        *out_size += (uint32_t)(outlen + sizeof(uint32_t));
+
+        in += cluster_size;
+        out += outlen + sizeof(uint32_t);
+
+        // new page needs to start at a 32-bit boundary
+        if (cluster_size - (*out_size % cluster_size) < sizeof(uint32_t)) {
+            memset(out, 0, cluster_size - (*out_size % cluster_size));
+            out += cluster_size - (*out_size % cluster_size);
+            *out_size += cluster_size - (*out_size % cluster_size);
+        }
+
+        if (*out_size >= data.length())
+            return nullopt;
+    }
+
+    outbuf.resize(*out_size);
+
+    if (outbuf.length() > data.length() - cluster_size)
+        return nullopt;
+
+    outbuf.resize((outbuf.length() + cluster_size - 1) & ~(cluster_size - 1), 0);
+
+    return outbuf;
 }
 #endif

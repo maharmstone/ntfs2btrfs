@@ -19,6 +19,7 @@
 
 #include "ntfs.h"
 #include "btrfs.h"
+#include "config.h"
 #include <string.h>
 #include <map>
 #include <list>
@@ -265,4 +266,9 @@ std::string do_lzx_decompress(const std::string_view& compdata, uint32_t size);
 std::string do_xpress_decompress(const std::string_view& compdata, uint32_t size, uint32_t chunk_size);
 
 // compress.cpp
+#ifdef WITH_ZLIB
 std::optional<std::string> zlib_compress(const std::string_view& data, uint32_t cluster_size);
+#endif
+#ifdef WITH_LZO
+std::optional<std::string> lzo_compress(const std::string_view& data, uint32_t cluster_size);
+#endif

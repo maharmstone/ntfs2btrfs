@@ -2308,11 +2308,25 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                 if (compression == BTRFS_COMPRESSION_NONE)
                     len = min(max_extent_size, inline_data.length());
-#ifdef WITH_ZLIB
+#if defined(WITH_ZLIB) || defined(WITH_LZO)
                 else {
+                    optional<string> c;
+
                     len = min(max_comp_extent_size, inline_data.length());
 
-                    auto c = zlib_compress(string_view(inline_data).substr(0, len), cluster_size);
+                    switch (compression) {
+#ifdef WITH_ZLIB
+                        case BTRFS_COMPRESSION_ZLIB:
+                            c = zlib_compress(string_view(inline_data).substr(0, len), cluster_size);
+                            break;
+#endif
+
+#ifdef WITH_LZO
+                        case BTRFS_COMPRESSION_LZO:
+                            c = lzo_compress(string_view(inline_data).substr(0, len), cluster_size);
+                            break;
+#endif
+                    }
 
                     if (c.has_value()) {
                         compdata = c.value();
@@ -3039,6 +3053,8 @@ static uint8_t parse_compression_type(const string_view& s) {
         return BTRFS_COMPRESSION_NONE;
     else if (s == "zlib")
         return BTRFS_COMPRESSION_ZLIB;
+    else if (s == "lzo")
+        return BTRFS_COMPRESSION_LZO;
     else
         throw formatted_error("Unrecognized compression type {}.", s);
 }
@@ -3066,9 +3082,8 @@ int main(int argc, char* argv[]) {
             fmt::print(R"(Usage: ntfs2btrfs [OPTION]... device
 Convert an NTFS filesystem to Btrfs.
 
-  -c, --compress=ALGO        recompress compressed files; ALGO can be 'zlib'
-                               or 'none'. Defaults to 'zlib' if compiled in or
-                               'none' otherwise.
+  -c, --compress=ALGO        recompress compressed files; ALGO can be 'zlib',
+                               'lzo', or 'none'.
 )");
             return 1;
         }
@@ -3076,7 +3091,9 @@ Convert an NTFS filesystem to Btrfs.
         string fn;
         uint8_t compression;
 
-#ifdef WITH_ZLIB
+#ifdef WITH_LZO
+        compression = BTRFS_COMPRESSION_LZO;
+#elif defined(WITH_ZLIB)
         compression = BTRFS_COMPRESSION_ZLIB;
 #else
         compression = BTRFS_COMPRESSION_NONE;
@@ -3112,6 +3129,24 @@ Convert an NTFS filesystem to Btrfs.
         if (compression == BTRFS_COMPRESSION_ZLIB)
             throw runtime_error("Zlib compression not compiled in.");
 #endif
+
+#ifndef WITH_LZO
+        if (compression == BTRFS_COMPRESSION_LZO)
+            throw runtime_error("LZO compression not compiled in.");
+#endif
+
+        switch (compression) {
+            case BTRFS_COMPRESSION_ZLIB:
+                fmt::print("Using Zlib compression.\n");
+                break;
+
+            case BTRFS_COMPRESSION_LZO:
+                fmt::print("Using LZO compression.\n");
+                break;
+
+            default:
+                fmt::print("Not using compression.\n");
+        }
 
 #if defined(__i386__) || defined(__x86_64__)
         check_cpu();
