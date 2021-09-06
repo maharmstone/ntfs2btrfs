@@ -654,7 +654,7 @@ static void set_volume_label(superblock& sb, ntfs& dev) {
     }
 }
 
-static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root) {
+static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, uint8_t compression) {
     uint32_t sector_size = 0x1000; // FIXME
     string buf;
     unsigned int i;
@@ -706,6 +706,9 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root) {
                         BTRFS_INCOMPAT_FLAGS_SKINNY_METADATA | BTRFS_INCOMPAT_FLAGS_NO_HOLES;
     sb.root_level = root_root.level;
     sb.chunk_root_level = chunk_root.level;
+
+    if (compression == BTRFS_COMPRESSION_LZO)
+        sb.incompat_flags |= BTRFS_INCOMPAT_FLAGS_COMPRESS_LZO;
 
     set_volume_label(sb, dev);
 
@@ -3022,7 +3025,7 @@ static void convert(ntfs& dev, uint8_t compression) {
         r.write_trees(dev);
     }
 
-    write_superblocks(dev, chunk_root, root_root);
+    write_superblocks(dev, chunk_root, root_root, compression);
 
     clear_first_cluster(dev);
 }
