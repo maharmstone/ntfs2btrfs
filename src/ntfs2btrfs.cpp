@@ -654,7 +654,7 @@ static void set_volume_label(superblock& sb, ntfs& dev) {
     }
 }
 
-static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, uint8_t compression) {
+static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum btrfs_compression compression) {
     uint32_t sector_size = 0x1000; // FIXME
     string buf;
     unsigned int i;
@@ -707,7 +707,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, uint
     sb.root_level = root_root.level;
     sb.chunk_root_level = chunk_root.level;
 
-    if (compression == BTRFS_COMPRESSION_LZO)
+    if (compression == btrfs_compression::lzo)
         sb.incompat_flags |= BTRFS_INCOMPAT_FLAGS_COMPRESS_LZO;
 
     set_volume_label(sb, dev);
@@ -1136,7 +1136,7 @@ static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint6
         auto ed2 = (EXTENT_DATA2*)&ed->data;
 
         ed->generation = 1;
-        ed->compression = 0;
+        ed->compression = btrfs_compression::none;
         ed->encryption = 0;
         ed->encoding = 0;
         ed->type = EXTENT_TYPE_REGULAR;
@@ -1654,7 +1654,7 @@ static bool string_eq_ci(const string_view& s1, const string_view& s2) {
 }
 
 static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir, list<data_alloc>& runs,
-                      ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist, uint8_t opt_compression) {
+                      ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist, enum btrfs_compression opt_compression) {
     INODE_ITEM ii;
     uint64_t file_size = 0;
     list<mapping> mappings;
@@ -2202,7 +2202,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         auto ed2 = (EXTENT_DATA2*)&ed->data;
 
         ed->generation = 1;
-        ed->compression = 0;
+        ed->compression = btrfs_compression::none;
         ed->encryption = 0;
         ed->encoding = 0;
         ed->type = EXTENT_TYPE_REGULAR;
@@ -2277,13 +2277,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     } else if (!inline_data.empty()) {
         if (inline_data.length() > max_inline) {
             vector<uint8_t> buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
-            uint8_t compression = opt_compression;
+            auto compression = opt_compression;
 
             auto& ed = *(EXTENT_DATA*)buf.data();
             auto& ed2 = *(EXTENT_DATA2*)&ed.data;
 
             ed.generation = 1;
-            ed.compression = BTRFS_COMPRESSION_NONE;
+            ed.compression = btrfs_compression::none;
             ed.encryption = 0;
             ed.encoding = 0;
             ed.type = EXTENT_TYPE_REGULAR;
@@ -2308,7 +2308,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 bool inserted = false;
                 string compdata;
 
-                if (compression == BTRFS_COMPRESSION_NONE)
+                if (compression == btrfs_compression::none)
                     len = min(max_extent_size, inline_data.length());
 #if defined(WITH_ZLIB) || defined(WITH_LZO)
                 else {
@@ -2318,16 +2318,18 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                     switch (compression) {
 #ifdef WITH_ZLIB
-                        case BTRFS_COMPRESSION_ZLIB:
+                        case btrfs_compression::zlib:
                             c = zlib_compress(string_view(inline_data).substr(0, len), cluster_size);
                             break;
 #endif
 
 #ifdef WITH_LZO
-                        case BTRFS_COMPRESSION_LZO:
+                        case btrfs_compression::lzo:
                             c = lzo_compress(string_view(inline_data).substr(0, len), cluster_size);
                             break;
 #endif
+                        default:
+                            break;
                     }
 
                     if (c.has_value()) {
@@ -2336,12 +2338,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         ii.flags |= BTRFS_INODE_COMPRESS;
                     } else // incompressible
-                        ed.compression = BTRFS_COMPRESSION_NONE;
+                        ed.compression = btrfs_compression::none;
 
                     // if first part of file incompressible, give up on rest and add nocomp flag
-                    if (pos == 0 && ed.compression == BTRFS_COMPRESSION_NONE) {
+                    if (pos == 0 && ed.compression == btrfs_compression::none) {
                         ii.flags |= BTRFS_INODE_NOCOMPRESS;
-                        compression = BTRFS_COMPRESSION_NONE;
+                        compression = btrfs_compression::none;
                         len = min(max_extent_size, inline_data.length());
                     }
 
@@ -2350,7 +2352,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 #endif
 
                 ed.decoded_size = ed2.num_bytes = len;
-                ed2.size = ed.compression == BTRFS_COMPRESSION_NONE ? len : compdata.length();
+                ed2.size = ed.compression == btrfs_compression::none ? len : compdata.length();
                 ii.st_blocks += ed.decoded_size;
 
                 ed2.address = allocate_data(len, true);
@@ -2358,7 +2360,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                 dev.seek(ed2.address - chunk_virt_offset);
 
-                if (ed.compression == BTRFS_COMPRESSION_NONE)
+                if (ed.compression == btrfs_compression::none)
                     dev.write(inline_data.data(), (size_t)len);
                 else
                     dev.write(compdata.data(), compdata.length());
@@ -2397,7 +2399,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             ed->generation = 1;
             ed->decoded_size = inline_data.length();
-            ed->compression = 0;
+            ed->compression = btrfs_compression::none;
             ed->encryption = 0;
             ed->encoding = 0;
             ed->type = EXTENT_TYPE_INLINE;
@@ -2470,7 +2472,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 }
 
 static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_alloc>& runs, ntfs_file& secure,
-                          uint8_t compression) {
+                          enum btrfs_compression compression) {
     list<space> inodes;
     list<uint64_t> skiplist;
     uint64_t total = 0, num = 0;
@@ -2860,7 +2862,7 @@ static void update_dir_sizes(root& r) {
     }
 }
 
-static void convert(ntfs& dev, uint8_t compression) {
+static void convert(ntfs& dev, enum btrfs_compression compression) {
     uint32_t sector_size = 0x1000; // FIXME
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
     list<data_alloc> runs;
@@ -3050,13 +3052,13 @@ static void check_cpu() noexcept {
 }
 #endif
 
-static uint8_t parse_compression_type(const string_view& s) {
+static enum btrfs_compression parse_compression_type(const string_view& s) {
     if (s == "none")
-        return BTRFS_COMPRESSION_NONE;
+        return btrfs_compression::none;
     else if (s == "zlib")
-        return BTRFS_COMPRESSION_ZLIB;
+        return btrfs_compression::zlib;
     else if (s == "lzo")
-        return BTRFS_COMPRESSION_LZO;
+        return btrfs_compression::lzo;
     else
         throw formatted_error("Unrecognized compression type {}.", s);
 }
@@ -3091,14 +3093,14 @@ Convert an NTFS filesystem to Btrfs.
         }
 
         string fn;
-        uint8_t compression;
+        enum btrfs_compression compression;
 
 #ifdef WITH_LZO
-        compression = BTRFS_COMPRESSION_LZO;
+        compression = btrfs_compression::lzo;
 #elif defined(WITH_ZLIB)
-        compression = BTRFS_COMPRESSION_ZLIB;
+        compression = btrfs_compression::zlib;
 #else
-        compression = BTRFS_COMPRESSION_NONE;
+        compression = btrfs_compression::none;
 #endif
 
         for (size_t i = 1; i < args.size(); i++) {
@@ -3128,21 +3130,21 @@ Convert an NTFS filesystem to Btrfs.
             throw runtime_error("No device given.");
 
 #ifndef WITH_ZLIB
-        if (compression == BTRFS_COMPRESSION_ZLIB)
+        if (compression == btrfs_compression::zlib)
             throw runtime_error("Zlib compression not compiled in.");
 #endif
 
 #ifndef WITH_LZO
-        if (compression == BTRFS_COMPRESSION_LZO)
+        if (compression == btrfs_compression::lzo)
             throw runtime_error("LZO compression not compiled in.");
 #endif
 
         switch (compression) {
-            case BTRFS_COMPRESSION_ZLIB:
+            case btrfs_compression::zlib:
                 fmt::print("Using Zlib compression.\n");
                 break;
 
-            case BTRFS_COMPRESSION_LZO:
+            case btrfs_compression::lzo:
                 fmt::print("Using LZO compression.\n");
                 break;
 

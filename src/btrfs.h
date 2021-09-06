@@ -58,10 +58,12 @@ static const uint64_t superblock_addrs[] = { 0x10000, 0x4000000, 0x4000000000, 0
 #define BTRFS_ROOT_FREE_SPACE   0xa
 #define BTRFS_ROOT_DATA_RELOC   0xFFFFFFFFFFFFFFF7
 
-#define BTRFS_COMPRESSION_NONE  0
-#define BTRFS_COMPRESSION_ZLIB  1
-#define BTRFS_COMPRESSION_LZO   2
-#define BTRFS_COMPRESSION_ZSTD  3
+enum class btrfs_compression : uint8_t {
+    none = 0,
+    zlib = 1,
+    lzo = 2,
+    zstd = 3
+};
 
 #define BTRFS_ENCRYPTION_NONE   0
 
@@ -337,7 +339,7 @@ typedef struct {
 typedef struct {
     uint64_t generation;
     uint64_t decoded_size;
-    uint8_t compression;
+    enum btrfs_compression compression;
     uint8_t encryption;
     uint16_t encoding;
     uint8_t type;
