@@ -619,7 +619,7 @@ void root::write_trees(ntfs& dev) {
     }
 }
 
-static void set_volume_label(superblock* sb, ntfs& dev) {
+static void set_volume_label(superblock& sb, ntfs& dev) {
     try {
         ntfs_file vol_file(dev, NTFS_VOLUME_INODE);
 
@@ -648,7 +648,7 @@ static void set_volume_label(superblock* sb, ntfs& dev) {
         if (vn.empty())
             return;
 
-        memcpy(sb->label, vn.data(), vn.length());
+        memcpy(sb.label, vn.data(), vn.length());
     } catch (const exception& e) { // shouldn't be fatal
         cerr << "Error while setting volume label: " << e.what() << endl;
     }
@@ -657,22 +657,21 @@ static void set_volume_label(superblock* sb, ntfs& dev) {
 static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root) {
     uint32_t sector_size = 0x1000; // FIXME
     string buf;
-    superblock* sb;
     unsigned int i;
     uint32_t sys_chunk_size;
     uint64_t total_used;
 
     buf.resize((size_t)sector_align(sizeof(superblock), sector_size));
-    sb = (superblock*)buf.data();
+    auto& sb = *(superblock*)buf.data();
 
     memset(buf.data(), 0, buf.length());
 
     sys_chunk_size = 0;
     for (const auto& c : chunk_root.items) {
         if (c.first.obj_type == TYPE_CHUNK_ITEM) {
-            auto ci = (CHUNK_ITEM*)c.second.data;
+            auto& ci = *(CHUNK_ITEM*)c.second.data;
 
-            if (ci->type & BLOCK_FLAG_SYSTEM) {
+            if (ci.type & BLOCK_FLAG_SYSTEM) {
                 sys_chunk_size += sizeof(KEY);
                 sys_chunk_size += c.second.len;
             }
@@ -688,48 +687,48 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root) {
         total_used += r.metadata_size;
     }
 
-    sb->uuid = fs_uuid;
-    sb->magic = BTRFS_MAGIC;
-    sb->generation = 1;
-    sb->root_tree_addr = root_root.tree_addr;
-    sb->chunk_tree_addr = chunk_root.tree_addr;
-    sb->total_bytes = device_size;
-    sb->bytes_used = total_used;
-    sb->root_dir_objectid = BTRFS_ROOT_TREEDIR;
-    sb->num_devices = 1;
-    sb->sector_size = sector_size;
-    sb->node_size = tree_size;
-    sb->leaf_size = tree_size;
-    sb->stripe_size = sector_size;
-    sb->n = sys_chunk_size;
-    sb->chunk_root_generation = 1;
-    sb->incompat_flags = BTRFS_INCOMPAT_FLAGS_MIXED_BACKREF | BTRFS_INCOMPAT_FLAGS_BIG_METADATA | BTRFS_INCOMPAT_FLAGS_EXTENDED_IREF |
-                         BTRFS_INCOMPAT_FLAGS_SKINNY_METADATA | BTRFS_INCOMPAT_FLAGS_NO_HOLES;
-    sb->root_level = root_root.level;
-    sb->chunk_root_level = chunk_root.level;
+    sb.uuid = fs_uuid;
+    sb.magic = BTRFS_MAGIC;
+    sb.generation = 1;
+    sb.root_tree_addr = root_root.tree_addr;
+    sb.chunk_tree_addr = chunk_root.tree_addr;
+    sb.total_bytes = device_size;
+    sb.bytes_used = total_used;
+    sb.root_dir_objectid = BTRFS_ROOT_TREEDIR;
+    sb.num_devices = 1;
+    sb.sector_size = sector_size;
+    sb.node_size = tree_size;
+    sb.leaf_size = tree_size;
+    sb.stripe_size = sector_size;
+    sb.n = sys_chunk_size;
+    sb.chunk_root_generation = 1;
+    sb.incompat_flags = BTRFS_INCOMPAT_FLAGS_MIXED_BACKREF | BTRFS_INCOMPAT_FLAGS_BIG_METADATA | BTRFS_INCOMPAT_FLAGS_EXTENDED_IREF |
+                        BTRFS_INCOMPAT_FLAGS_SKINNY_METADATA | BTRFS_INCOMPAT_FLAGS_NO_HOLES;
+    sb.root_level = root_root.level;
+    sb.chunk_root_level = chunk_root.level;
 
     set_volume_label(sb, dev);
 
     for (const auto& c : chunk_root.items) {
         if (c.first.obj_type == TYPE_DEV_ITEM) {
-            memcpy(&sb->dev_item, c.second.data, sizeof(DEV_ITEM));
+            memcpy(&sb.dev_item, c.second.data, sizeof(DEV_ITEM));
             break;
         }
     }
 
-    sb->uuid_tree_generation = 1;
+    sb.uuid_tree_generation = 1;
 
     {
-        uint8_t* ptr = sb->sys_chunk_array;
+        uint8_t* ptr = sb.sys_chunk_array;
 
         for (const auto& c : chunk_root.items) {
             if (c.first.obj_type == TYPE_CHUNK_ITEM) {
-                auto ci = (CHUNK_ITEM*)c.second.data;
+                auto& ci = *(CHUNK_ITEM*)c.second.data;
 
-                if (ci->type & BLOCK_FLAG_SYSTEM) {
-                    KEY* key = (KEY*)ptr;
+                if (ci.type & BLOCK_FLAG_SYSTEM) {
+                    auto& key = *(KEY*)ptr;
 
-                    *key = c.first;
+                    key = c.first;
 
                     ptr += sizeof(KEY);
 
@@ -746,9 +745,9 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root) {
         if (superblock_addrs[i] > device_size - buf.length())
             return;
 
-        sb->sb_phys_addr = superblock_addrs[i];
+        sb.sb_phys_addr = superblock_addrs[i];
 
-        *(uint32_t*)sb->checksum = ~calc_crc32c(0xffffffff, (uint8_t*)&sb->uuid, sizeof(superblock) - sizeof(sb->checksum));
+        *(uint32_t*)sb.checksum = ~calc_crc32c(0xffffffff, (uint8_t*)&sb.uuid, sizeof(superblock) - sizeof(sb.checksum));
 
         dev.seek(superblock_addrs[i]);
         dev.write(buf.data(), buf.length());
