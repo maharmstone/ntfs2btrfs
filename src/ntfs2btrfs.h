@@ -272,3 +272,6 @@ std::optional<std::string> zlib_compress(const std::string_view& data, uint32_t 
 #ifdef WITH_LZO
 std::optional<std::string> lzo_compress(const std::string_view& data, uint32_t cluster_size);
 #endif
+#ifdef WITH_ZSTD
+std::optional<std::string> zstd_compress(const std::string_view& data, uint32_t cluster_size);
+#endif

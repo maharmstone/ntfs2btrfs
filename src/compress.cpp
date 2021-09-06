@@ -25,6 +25,10 @@
 #include <lzo/lzo1x.h>
 #endif
 
+#ifdef WITH_ZSTD
+#include <zstd.h>
+#endif
+
 using namespace std;
 
 #ifdef WITH_ZLIB
@@ -131,5 +135,23 @@ optional<string> lzo_compress(const string_view& data, uint32_t cluster_size) {
     outbuf.resize((outbuf.length() + cluster_size - 1) & ~(cluster_size - 1), 0);
 
     return outbuf;
+}
+#endif
+
+#ifdef WITH_ZSTD
+optional<string> zstd_compress(const string_view& data, uint32_t cluster_size) {
+    string out(ZSTD_compressBound(data.length()), 0);
+
+    auto ret = ZSTD_compress(out.data(), out.length(), data.data(), data.length(), 1);
+    if (ZSTD_isError(ret))
+        throw formatted_error("ZSTD_compress returned {}", ret);
+
+    if (ret > data.length() - cluster_size)
+        return nullopt;
+
+    out.resize(ret);
+    out.resize((out.length() + cluster_size - 1) & ~(cluster_size - 1), 0);
+
+    return out;
 }
 #endif

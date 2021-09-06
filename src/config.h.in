@@ -3,3 +3,4 @@
 #define PROJECT_VER  "@PROJECT_VERSION@"
 #cmakedefine WITH_ZLIB 1
 #cmakedefine WITH_LZO 1
+#cmakedefine WITH_ZSTD 1

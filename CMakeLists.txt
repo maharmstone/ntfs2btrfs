@@ -9,6 +9,7 @@ project(ntfs2btrfs VERSION 20210523)
 
 option(WITH_ZLIB "Include zlib support" ON)
 option(WITH_LZO "Include lzo support" ON)
+option(WITH_ZSTD "Include zstd support" ON)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 
@@ -52,6 +53,10 @@ endif()
 
 if(WITH_LZO)
     target_link_libraries(ntfs2btrfs lzo2)
+endif()
+
+if(WITH_ZSTD)
+    target_link_libraries(ntfs2btrfs zstd)
 endif()
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

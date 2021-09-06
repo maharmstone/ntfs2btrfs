@@ -709,6 +709,8 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
 
     if (compression == btrfs_compression::lzo)
         sb.incompat_flags |= BTRFS_INCOMPAT_FLAGS_COMPRESS_LZO;
+    else if (compression == btrfs_compression::zstd)
+        sb.incompat_flags |= BTRFS_INCOMPAT_FLAGS_COMPRESS_ZSTD;
 
     set_volume_label(sb, dev);
 
@@ -2308,9 +2310,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 bool inserted = false;
                 string compdata;
 
-                if (compression == btrfs_compression::none)
+                if (compression == btrfs_compression::none || inline_data.length() <= cluster_size)
                     len = min(max_extent_size, inline_data.length());
-#if defined(WITH_ZLIB) || defined(WITH_LZO)
+#if defined(WITH_ZLIB) || defined(WITH_LZO) || defined(WITH_ZSTD)
                 else {
                     optional<string> c;
 
@@ -2326,6 +2328,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 #ifdef WITH_LZO
                         case btrfs_compression::lzo:
                             c = lzo_compress(string_view(inline_data).substr(0, len), cluster_size);
+                            break;
+#endif
+
+#ifdef WITH_ZSTD
+                        case btrfs_compression::zstd:
+                            c = zstd_compress(string_view(inline_data).substr(0, len), cluster_size);
                             break;
 #endif
                         default:
@@ -3059,6 +3067,8 @@ static enum btrfs_compression parse_compression_type(const string_view& s) {
         return btrfs_compression::zlib;
     else if (s == "lzo")
         return btrfs_compression::lzo;
+    else if (s == "zstd")
+        return btrfs_compression::zstd;
     else
         throw formatted_error("Unrecognized compression type {}.", s);
 }
@@ -3087,7 +3097,7 @@ int main(int argc, char* argv[]) {
 Convert an NTFS filesystem to Btrfs.
 
   -c, --compress=ALGO        recompress compressed files; ALGO can be 'zlib',
-                               'lzo', or 'none'.
+                               'lzo', 'zstd', or 'none'.
 )");
             return 1;
         }
@@ -3095,7 +3105,9 @@ Convert an NTFS filesystem to Btrfs.
         string fn;
         enum btrfs_compression compression;
 
-#ifdef WITH_LZO
+#ifdef WITH_ZSTD
+        compression = btrfs_compression::zstd;
+#elif defined(WITH_LZO)
         compression = btrfs_compression::lzo;
 #elif defined(WITH_ZLIB)
         compression = btrfs_compression::zlib;
@@ -3139,6 +3151,11 @@ Convert an NTFS filesystem to Btrfs.
             throw runtime_error("LZO compression not compiled in.");
 #endif
 
+#ifndef WITH_ZSTD
+        if (compression == btrfs_compression::zstd)
+            throw runtime_error("Zstd compression not compiled in.");
+#endif
+
         switch (compression) {
             case btrfs_compression::zlib:
                 fmt::print("Using Zlib compression.\n");
@@ -3148,8 +3165,13 @@ Convert an NTFS filesystem to Btrfs.
                 fmt::print("Using LZO compression.\n");
                 break;
 
-            default:
+            case btrfs_compression::zstd:
+                fmt::print("Using LZO compression.\n");
+                break;
+
+            case btrfs_compression::none:
                 fmt::print("Not using compression.\n");
+                break;
         }
 
 #if defined(__i386__) || defined(__x86_64__)
