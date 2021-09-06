@@ -43,10 +43,6 @@
 
 #include "config.h"
 
-#ifdef WITH_ZLIB
-#include <zlib.h>
-#endif
-
 using namespace std;
 
 list<chunk> chunks;
@@ -1655,54 +1651,6 @@ static bool string_eq_ci(const string_view& s1, const string_view& s2) {
     return true;
 }
 
-#ifdef WITH_ZLIB
-static optional<string> try_compress(const string_view& data, uint32_t cluster_size) {
-    z_stream c_stream;
-    int ret;
-    string out(data.length(), 0);
-
-    c_stream.zalloc = Z_NULL;
-    c_stream.zfree = Z_NULL;
-    c_stream.opaque = (voidpf)0;
-
-    ret = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
-
-    if (ret != Z_OK)
-        throw formatted_error("deflateInit returned {}", ret);
-
-    c_stream.next_in = (uint8_t*)data.data();
-    c_stream.avail_in = (unsigned int)data.length();
-
-    c_stream.next_out = (uint8_t*)out.data();
-    c_stream.avail_out = (unsigned int)out.length();
-
-    do {
-        ret = deflate(&c_stream, Z_FINISH);
-
-        if (ret != Z_OK && ret != Z_STREAM_END) {
-            deflateEnd(&c_stream);
-            throw formatted_error("deflate returned {}", ret);
-        }
-
-        if (c_stream.avail_in == 0 || c_stream.avail_out == 0)
-            break;
-    } while (ret != Z_STREAM_END);
-
-    deflateEnd(&c_stream);
-
-    if (c_stream.avail_in > 0) // compressed version would be longer than uncompressed
-        return nullopt;
-
-    if (c_stream.total_out > data.length() - cluster_size) // space saving less than one sector
-        return nullopt;
-
-    // round to sector, and zero end
-    out.resize((c_stream.total_out + cluster_size - 1) & ~(cluster_size - 1), 0);
-
-    return out;
-}
-#endif
-
 static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir, list<data_alloc>& runs,
                       ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist, uint8_t opt_compression) {
     INODE_ITEM ii;
@@ -2364,7 +2312,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 else {
                     len = min(max_comp_extent_size, inline_data.length());
 
-                    auto c = try_compress(string_view(inline_data).substr(0, len), cluster_size);
+                    auto c = zlib_compress(string_view(inline_data).substr(0, len), cluster_size);
 
                     if (c.has_value()) {
                         compdata = c.value();

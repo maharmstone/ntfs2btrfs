@@ -24,6 +24,7 @@
 #include <list>
 #include <string>
 #include <vector>
+#include <optional>
 
 #pragma warning(push)
 #pragma warning(disable : 26495 26451 26437 26812)
@@ -262,3 +263,6 @@ void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int s
 std::string lznt1_decompress(std::string_view compdata, uint32_t size);
 std::string do_lzx_decompress(const std::string_view& compdata, uint32_t size);
 std::string do_xpress_decompress(const std::string_view& compdata, uint32_t size, uint32_t chunk_size);
+
+// compress.cpp
+std::optional<std::string> zlib_compress(const std::string_view& data, uint32_t cluster_size);

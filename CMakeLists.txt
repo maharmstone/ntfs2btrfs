@@ -23,6 +23,7 @@ endif()
 set(SRC_FILES src/ntfs2btrfs.cpp
     src/ntfs.cpp
     src/decomp.cpp
+    src/compress.cpp
     src/crc32c.c
     src/ebiggers/lzx_decompress.c
     src/ebiggers/lzx_common.c
