@@ -654,7 +654,8 @@ static void set_volume_label(superblock& sb, ntfs& dev) {
     }
 }
 
-static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum btrfs_compression compression) {
+static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum btrfs_compression compression,
+                              enum btrfs_csum_type csum_type) {
     uint32_t sector_size = 0x1000; // FIXME
     string buf;
     unsigned int i;
@@ -704,7 +705,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
     sb.chunk_root_generation = 1;
     sb.incompat_flags = BTRFS_INCOMPAT_FLAGS_MIXED_BACKREF | BTRFS_INCOMPAT_FLAGS_BIG_METADATA | BTRFS_INCOMPAT_FLAGS_EXTENDED_IREF |
                         BTRFS_INCOMPAT_FLAGS_SKINNY_METADATA | BTRFS_INCOMPAT_FLAGS_NO_HOLES;
-    sb.csum_type = btrfs_csum_type::crc32c;
+    sb.csum_type = csum_type;
     sb.root_level = root_root.level;
     sb.chunk_root_level = chunk_root.level;
 
@@ -2871,7 +2872,7 @@ static void update_dir_sizes(root& r) {
     }
 }
 
-static void convert(ntfs& dev, enum btrfs_compression compression) {
+static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_csum_type csum_type) {
     uint32_t sector_size = 0x1000; // FIXME
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
     list<data_alloc> runs;
@@ -3036,7 +3037,7 @@ static void convert(ntfs& dev, enum btrfs_compression compression) {
         r.write_trees(dev);
     }
 
-    write_superblocks(dev, chunk_root, root_root, compression);
+    write_superblocks(dev, chunk_root, root_root, compression, csum_type);
 
     clear_first_cluster(dev);
 }
@@ -3074,6 +3075,13 @@ static enum btrfs_compression parse_compression_type(const string_view& s) {
         throw formatted_error("Unrecognized compression type {}.", s);
 }
 
+static enum btrfs_csum_type parse_csum_type(const string_view& s) {
+    if (s == "crc32c")
+        return btrfs_csum_type::crc32c;
+    else
+        throw formatted_error("Unrecognized hash type {}.", s);
+}
+
 static vector<string_view> read_args(int argc, char* argv[]) {
     vector<string_view> ret;
 
@@ -3099,12 +3107,15 @@ Convert an NTFS filesystem to Btrfs.
 
   -c, --compress=ALGO        recompress compressed files; ALGO can be 'zlib',
                                'lzo', 'zstd', or 'none'.
+  -h, --hash=ALGO            checksum algorithm to use; ALGO can be 'crc32c'
+                                (default)
 )");
             return 1;
         }
 
         string fn;
         enum btrfs_compression compression;
+        enum btrfs_csum_type csum_type;
 
 #ifdef WITH_ZSTD
         compression = btrfs_compression::zstd;
@@ -3115,6 +3126,8 @@ Convert an NTFS filesystem to Btrfs.
 #else
         compression = btrfs_compression::none;
 #endif
+
+        csum_type = btrfs_csum_type::crc32c;
 
         for (size_t i = 1; i < args.size(); i++) {
             const auto& arg = args[i];
@@ -3128,6 +3141,14 @@ Convert an NTFS filesystem to Btrfs.
                     i++;
                 } else if (arg.substr(0, 11) == "--compress=")
                     compression = parse_compression_type(arg.substr(11));
+                else if (arg == "-h") {
+                    if (i == args.size() - 1)
+                        throw runtime_error("No value given for -h option.");
+
+                    csum_type = parse_csum_type(args[i+1]);
+                    i++;
+                } else if (arg.substr(0, 7) == "--hash=")
+                    csum_type = parse_csum_type(arg.substr(11));
                 else
                     throw formatted_error("Unrecognized option {}.", arg);
 
@@ -3175,13 +3196,22 @@ Convert an NTFS filesystem to Btrfs.
                 break;
         }
 
+        switch (csum_type) {
+            case btrfs_csum_type::crc32c:
+                fmt::print("Using CRC32C for checksums.\n");
+                break;
+
+            default:
+                break;
+        }
+
 #if defined(__i386__) || defined(__x86_64__)
         check_cpu();
 #endif
 
         ntfs dev(fn);
 
-        convert(dev, compression);
+        convert(dev, compression, csum_type);
     } catch (const exception& e) {
         cerr << e.what() << endl;
         return 1;
