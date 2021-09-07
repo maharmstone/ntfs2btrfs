@@ -20,6 +20,7 @@
 #include "ntfs.h"
 #include "ntfs2btrfs.h"
 #include "crc32c.h"
+#include "xxhash.h"
 
 #if defined(__i386__) || defined(__x86_64__)
 #ifndef _MSC_VER
@@ -396,6 +397,9 @@ static void calc_tree_hash(tree_header* th, enum btrfs_csum_type csum_type) {
             *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
             break;
 
+        case btrfs_csum_type::xxhash:
+            *(uint64_t*)th->csum = XXH64((uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum), 0);
+
         default:
             break;
     }
@@ -768,6 +772,10 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
         switch (csum_type) {
             case btrfs_csum_type::crc32c:
                 *(uint32_t*)sb.checksum = ~calc_crc32c(0xffffffff, (uint8_t*)&sb.uuid, sizeof(superblock) - sizeof(sb.checksum));
+                break;
+
+            case btrfs_csum_type::xxhash:
+                *(uint64_t*)sb.checksum = XXH64(&sb.uuid, sizeof(superblock) - sizeof(sb.checksum), 0);
                 break;
 
             default:
@@ -2618,8 +2626,22 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, en
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     list<space> runs2;
     uint64_t total = 0, num = 0;
+    uint32_t csum_size;
 
-    auto max_run = (uint32_t)((tree_size - sizeof(tree_header) - sizeof(leaf_node)) / sizeof(uint32_t));
+    switch (csum_type) {
+        case btrfs_csum_type::crc32c:
+            csum_size = sizeof(uint32_t);
+            break;
+
+        case btrfs_csum_type::xxhash:
+            csum_size = sizeof(uint64_t);
+            break;
+
+        default:
+            break;
+    }
+
+    auto max_run = (uint32_t)((tree_size - sizeof(tree_header) - sizeof(leaf_node)) / csum_size);
 
     // FIXME - these are clusters, when they should be sectors
 
@@ -2668,13 +2690,13 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, en
 
     for (const auto& r : runs2) {
         string data;
-        vector<uint32_t> csums;
+        vector<uint8_t> csums;
 
         if (r.offset * cluster_size >= orig_device_size)
             break;
 
         data.resize((size_t)(r.length * cluster_size));
-        csums.resize((size_t)(r.length * cluster_size / sector_size));
+        csums.resize((size_t)(r.length * cluster_size * csum_size / sector_size));
 
         dev.seek(r.offset * cluster_size);
         dev.read(data.data(), data.length());
@@ -2692,10 +2714,25 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, en
 
         switch (csum_type) {
             case btrfs_csum_type::crc32c: {
-                uint32_t* csum = &csums[0];
+                auto csum = (uint32_t*)&csums[0];
 
                 while (sv.length() > 0) {
                     *csum = ~calc_crc32c(0xffffffff, (const uint8_t*)sv.data(), sector_size);
+
+                    csum++;
+                    sv = sv.substr(sector_size);
+
+                    msg();
+                }
+
+                break;
+            }
+
+            case btrfs_csum_type::xxhash: {
+                auto csum = (uint64_t*)&csums[0];
+
+                while (sv.length() > 0) {
+                    *csum = XXH64(sv.data(), sector_size, 0);
 
                     csum++;
                     sv = sv.substr(sector_size);
@@ -2710,7 +2747,7 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, en
                 break;
         }
 
-        add_item(csum_root, EXTENT_CSUM_ID, TYPE_EXTENT_CSUM, (r.offset * cluster_size) + chunk_virt_offset, &csums[0], (uint16_t)(r.length * cluster_size * sizeof(uint32_t) / sector_size));
+        add_item(csum_root, EXTENT_CSUM_ID, TYPE_EXTENT_CSUM, (r.offset * cluster_size) + chunk_virt_offset, &csums[0], (uint16_t)(r.length * cluster_size * csum_size / sector_size));
     }
 
     fmt::print("\n");
@@ -3110,6 +3147,8 @@ static enum btrfs_compression parse_compression_type(const string_view& s) {
 static enum btrfs_csum_type parse_csum_type(const string_view& s) {
     if (s == "crc32c")
         return btrfs_csum_type::crc32c;
+    else if (s == "xxhash")
+        return btrfs_csum_type::xxhash;
     else
         throw formatted_error("Unrecognized hash type {}.", s);
 }
@@ -3140,7 +3179,7 @@ Convert an NTFS filesystem to Btrfs.
   -c, --compress=ALGO        recompress compressed files; ALGO can be 'zlib',
                                'lzo', 'zstd', or 'none'.
   -h, --hash=ALGO            checksum algorithm to use; ALGO can be 'crc32c'
-                                (default)
+                                (default) or 'xxhash'
 )");
             return 1;
         }
@@ -3231,6 +3270,10 @@ Convert an NTFS filesystem to Btrfs.
         switch (csum_type) {
             case btrfs_csum_type::crc32c:
                 fmt::print("Using CRC32C for checksums.\n");
+                break;
+
+            case btrfs_csum_type::xxhash:
+                fmt::print("Using xxHash for checksums.\n");
                 break;
 
             default:
