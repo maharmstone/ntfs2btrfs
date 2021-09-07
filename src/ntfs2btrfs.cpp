@@ -390,7 +390,18 @@ static uint64_t allocate_data(uint64_t length, bool change_used) {
     throw formatted_error("Could not allocate data address");
 }
 
-void root::create_trees(root& extent_root) {
+static void calc_tree_hash(tree_header* th, enum btrfs_csum_type csum_type) {
+    switch (csum_type) {
+        case btrfs_csum_type::crc32c:
+            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
+            break;
+
+        default:
+            break;
+    }
+}
+
+void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
     uint32_t space_left, num_items;
     string buf;
     tree_header* th;
@@ -426,7 +437,7 @@ void root::create_trees(root& extent_root) {
                 addresses.push_back(th->address);
                 th->num_items = num_items;
 
-                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
+                calc_tree_hash(th, csum_type);
 
                 trees.push_back(buf);
                 metadata_size += tree_size;
@@ -476,7 +487,7 @@ void root::create_trees(root& extent_root) {
         addresses.push_back(th->address);
         th->num_items = num_items;
 
-        *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
+        calc_tree_hash(th, csum_type);
 
         trees.push_back(buf);
         metadata_size += tree_size;
@@ -532,7 +543,7 @@ void root::create_trees(root& extent_root) {
                 addresses.push_back(th->address);
                 th->num_items = num_items;
 
-                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
+                calc_tree_hash(th, csum_type);
 
                 trees.push_back(buf);
                 metadata_size += tree_size;
@@ -577,7 +588,7 @@ void root::create_trees(root& extent_root) {
             addresses.push_back(th->address);
             th->num_items = num_items;
 
-            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
+            calc_tree_hash(th, csum_type);
 
             trees.push_back(buf);
             metadata_size += tree_size;
@@ -754,7 +765,14 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
 
         sb.sb_phys_addr = superblock_addrs[i];
 
-        *(uint32_t*)sb.checksum = ~calc_crc32c(0xffffffff, (uint8_t*)&sb.uuid, sizeof(superblock) - sizeof(sb.checksum));
+        switch (csum_type) {
+            case btrfs_csum_type::crc32c:
+                *(uint32_t*)sb.checksum = ~calc_crc32c(0xffffffff, (uint8_t*)&sb.uuid, sizeof(superblock) - sizeof(sb.checksum));
+                break;
+
+            default:
+                break;
+        }
 
         dev.seek(superblock_addrs[i]);
         dev.write(buf.data(), buf.length());
@@ -804,7 +822,7 @@ static void add_to_root_root(const root& r, root& root_root) {
     add_item(root_root, r.id, TYPE_ROOT_ITEM, 0, &ri, sizeof(ROOT_ITEM));
 }
 
-static void update_root_root(root& root_root) {
+static void update_root_root(root& root_root, enum btrfs_csum_type csum_type) {
     for (auto& t : root_root.trees) {
         auto th = (tree_header*)t.data();
 
@@ -831,7 +849,7 @@ static void update_root_root(root& root_root) {
         }
 
         if (changed)
-            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
+            calc_tree_hash(th, csum_type);
     }
 }
 
@@ -854,7 +872,7 @@ static BTRFS_UUID generate_uuid(default_random_engine& gen) {
     return uuid;
 }
 
-static void update_extent_root(root& extent_root) {
+static void update_extent_root(root& extent_root, enum btrfs_csum_type csum_type) {
     for (auto& t : extent_root.trees) {
         auto th = (tree_header*)t.data();
 
@@ -879,7 +897,7 @@ static void update_extent_root(root& extent_root) {
         }
 
         if (changed)
-            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
+            calc_tree_hash(th, csum_type);
     }
 }
 
@@ -950,7 +968,7 @@ static void populate_fstree(root& r) {
     add_inode_ref(r, SUBVOL_ROOT_INODE, SUBVOL_ROOT_INODE, 0, "..");
 }
 
-static void update_chunk_root(root& chunk_root) {
+static void update_chunk_root(root& chunk_root, enum btrfs_csum_type csum_type) {
     for (auto& t : chunk_root.trees) {
         auto th = (tree_header*)t.data();
 
@@ -969,7 +987,7 @@ static void update_chunk_root(root& chunk_root) {
                     di->bytes_used += c.length;
                 }
 
-                *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
+                calc_tree_hash(th, csum_type);
 
                 return;
             }
@@ -2595,7 +2613,7 @@ static void create_data_extent_items(root& extent_root, const list<data_alloc>& 
     }
 }
 
-static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
+static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, enum btrfs_csum_type csum_type) {
     uint32_t sector_size = 0x1000; // FIXME
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     list<space> runs2;
@@ -2662,20 +2680,34 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev) {
         dev.read(data.data(), data.length());
 
         string_view sv = data;
-        uint32_t* csum = &csums[0];
 
-        while (sv.length() > 0) {
-            *csum = ~calc_crc32c(0xffffffff, (const uint8_t*)sv.data(), sector_size);
-
-            csum++;
-            sv = sv.substr(sector_size);
-
+        auto msg = [&]() {
             num++;
 
             if (num % 1000 == 0 || num == total) {
                 fmt::print("Calculating checksums {} / {} ({:1.1f}%)\r", num, total, (float)num * 100.0f / (float)total);
                 fflush(stdout);
             }
+        };
+
+        switch (csum_type) {
+            case btrfs_csum_type::crc32c: {
+                uint32_t* csum = &csums[0];
+
+                while (sv.length() > 0) {
+                    *csum = ~calc_crc32c(0xffffffff, (const uint8_t*)sv.data(), sector_size);
+
+                    csum++;
+                    sv = sv.substr(sector_size);
+
+                    msg();
+                }
+
+                break;
+            }
+
+            default:
+                break;
         }
 
         add_item(csum_root, EXTENT_CSUM_ID, TYPE_EXTENT_CSUM, (r.offset * cluster_size) + chunk_virt_offset, &csums[0], (uint16_t)(r.length * cluster_size * sizeof(uint32_t) / sector_size));
@@ -2982,13 +3014,13 @@ static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_cs
             update_dir_sizes(r);
     }
 
-    calc_checksums(csum_root, runs, dev);
+    calc_checksums(csum_root, runs, dev, csum_type);
 
     populate_root_root(root_root);
 
     for (auto& r : roots) {
         if (r.id != BTRFS_ROOT_EXTENT && r.id != BTRFS_ROOT_CHUNK && r.id != BTRFS_ROOT_DEVTREE)
-            r.create_trees(extent_root);
+            r.create_trees(extent_root, csum_type);
     }
 
     do {
@@ -3013,7 +3045,7 @@ static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_cs
                 r.trees.clear();
 
                 r.allocations_done = false;
-                r.create_trees(extent_root);
+                r.create_trees(extent_root, csum_type);
 
                 if (r.allocations_done)
                     extents_changed = true;
@@ -3025,13 +3057,13 @@ static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_cs
     } while (true);
 
     // update tree addresses and levels in-place in root 1
-    update_root_root(root_root);
+    update_root_root(root_root, csum_type);
 
     // update used value in BLOCK_GROUP_ITEMs
-    update_extent_root(extent_root);
+    update_extent_root(extent_root, csum_type);
 
     // update bytes_used in DEV_ITEM in root 3
-    update_chunk_root(chunk_root);
+    update_chunk_root(chunk_root, csum_type);
 
     for (auto& r : roots) {
         r.write_trees(dev);

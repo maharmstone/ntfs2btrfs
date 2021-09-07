@@ -133,7 +133,7 @@ class root {
 public:
     root(uint64_t id) : id(id) { }
 
-    void create_trees(root& extent_root);
+    void create_trees(root& extent_root, enum btrfs_csum_type csum_type);
     void write_trees(ntfs& dev);
 
     uint64_t id;
