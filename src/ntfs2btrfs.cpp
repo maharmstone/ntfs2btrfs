@@ -704,6 +704,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
     sb.chunk_root_generation = 1;
     sb.incompat_flags = BTRFS_INCOMPAT_FLAGS_MIXED_BACKREF | BTRFS_INCOMPAT_FLAGS_BIG_METADATA | BTRFS_INCOMPAT_FLAGS_EXTENDED_IREF |
                         BTRFS_INCOMPAT_FLAGS_SKINNY_METADATA | BTRFS_INCOMPAT_FLAGS_NO_HOLES;
+    sb.csum_type = btrfs_csum_type::crc32c;
     sb.root_level = root_root.level;
     sb.chunk_root_level = chunk_root.level;
 

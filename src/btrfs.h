@@ -122,6 +122,13 @@ enum class btrfs_compression : uint8_t {
 
 #define BTRFS_ORPHAN_INODE_OBJID         0xFFFFFFFFFFFFFFFB
 
+enum class btrfs_csum_type : uint16_t {
+    crc32c = 0,
+    xxhash = 1,
+    sha256 = 2,
+    blake2 = 3
+};
+
 #pragma pack(push, 1)
 
 typedef struct {
@@ -232,7 +239,7 @@ typedef struct {
     uint64_t compat_flags;
     uint64_t compat_ro_flags;
     uint64_t incompat_flags;
-    uint16_t csum_type;
+    enum btrfs_csum_type csum_type;
     uint8_t root_level;
     uint8_t chunk_root_level;
     uint8_t log_root_level;
