@@ -399,6 +399,11 @@ static void calc_tree_hash(tree_header* th, enum btrfs_csum_type csum_type) {
 
         case btrfs_csum_type::xxhash:
             *(uint64_t*)th->csum = XXH64((uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum), 0);
+            break;
+
+        case btrfs_csum_type::sha256:
+            calc_sha256((uint8_t*)th, &th->fs_uuid, tree_size - sizeof(th->csum));
+            break;
 
         default:
             break;
@@ -776,6 +781,10 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
 
             case btrfs_csum_type::xxhash:
                 *(uint64_t*)sb.checksum = XXH64(&sb.uuid, sizeof(superblock) - sizeof(sb.checksum), 0);
+                break;
+
+            case btrfs_csum_type::sha256:
+                calc_sha256((uint8_t*)&sb, &sb.uuid, sizeof(superblock) - sizeof(sb.checksum));
                 break;
 
             default:
@@ -2637,6 +2646,10 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, en
             csum_size = sizeof(uint64_t);
             break;
 
+        case btrfs_csum_type::sha256:
+            csum_size = 32;
+            break;
+
         default:
             break;
     }
@@ -2735,6 +2748,21 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, en
                     *csum = XXH64(sv.data(), sector_size, 0);
 
                     csum++;
+                    sv = sv.substr(sector_size);
+
+                    msg();
+                }
+
+                break;
+            }
+
+            case btrfs_csum_type::sha256: {
+                auto csum = (uint8_t*)&csums[0];
+
+                while (sv.length() > 0) {
+                    calc_sha256(csum, sv.data(), sector_size);
+
+                    csum += csum_size;
                     sv = sv.substr(sector_size);
 
                     msg();
@@ -3149,6 +3177,8 @@ static enum btrfs_csum_type parse_csum_type(const string_view& s) {
         return btrfs_csum_type::crc32c;
     else if (s == "xxhash")
         return btrfs_csum_type::xxhash;
+    else if (s == "sha256")
+        return btrfs_csum_type::sha256;
     else
         throw formatted_error("Unrecognized hash type {}.", s);
 }
@@ -3179,7 +3209,7 @@ Convert an NTFS filesystem to Btrfs.
   -c, --compress=ALGO        recompress compressed files; ALGO can be 'zlib',
                                'lzo', 'zstd', or 'none'.
   -h, --hash=ALGO            checksum algorithm to use; ALGO can be 'crc32c'
-                                (default) or 'xxhash'
+                                (default), 'xxhash', or 'sha256'
 )");
             return 1;
         }
@@ -3274,6 +3304,10 @@ Convert an NTFS filesystem to Btrfs.
 
             case btrfs_csum_type::xxhash:
                 fmt::print("Using xxHash for checksums.\n");
+                break;
+
+            case btrfs_csum_type::sha256:
+                fmt::print("Using SHA256 for checksums.\n");
                 break;
 
             default:

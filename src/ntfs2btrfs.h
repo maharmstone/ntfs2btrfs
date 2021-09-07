@@ -275,3 +275,6 @@ std::optional<std::string> lzo_compress(const std::string_view& data, uint32_t c
 #ifdef WITH_ZSTD
 std::optional<std::string> zstd_compress(const std::string_view& data, uint32_t cluster_size);
 #endif
+
+// sha256.c
+extern "C" void calc_sha256(uint8_t* hash, const void* input, size_t len);
