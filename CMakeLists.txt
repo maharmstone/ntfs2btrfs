@@ -29,6 +29,7 @@ set(SRC_FILES src/ntfs2btrfs.cpp
     src/crc32c.c
     src/xxhash.c
     src/sha256.c
+    src/blake2b-ref.c
     src/ebiggers/lzx_decompress.c
     src/ebiggers/lzx_common.c
     src/ebiggers/aligned_malloc.c
