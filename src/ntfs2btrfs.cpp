@@ -2799,34 +2799,35 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, en
     fmt::print("\n");
 }
 
-static void protect_data(ntfs& dev, list<data_alloc>& runs, uint64_t cluster_start, uint64_t cluster_end) {
-    if (split_runs(runs, cluster_start, cluster_end - cluster_start, dummy_inode, 0)) {
-        string sb;
-        uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-        uint64_t addr = allocate_data((cluster_end - cluster_start) * cluster_size, false) - chunk_virt_offset;
+static void protect_cluster(ntfs& dev, list<data_alloc>& runs, uint64_t cluster) {
+    if (!split_runs(runs, cluster, 1, dummy_inode, 0))
+        return;
 
-        if (cluster_end * cluster_size > orig_device_size)
-            sb.resize((size_t)(orig_device_size - (cluster_start * cluster_size)));
-        else
-            sb.resize((size_t)((cluster_end - cluster_start) * cluster_size));
+    string sb;
+    uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+    uint64_t addr = allocate_data(cluster_size, false) - chunk_virt_offset;
 
-        dev.seek(cluster_start * cluster_size);
-        dev.read(sb.data(), sb.length());
+    if ((cluster + 1) * cluster_size > orig_device_size)
+        sb.resize((size_t)(orig_device_size - (cluster * cluster_size)));
+    else
+        sb.resize((size_t)cluster_size);
 
-        dev.seek(addr);
-        dev.write(sb.data(), sb.length());
+    dev.seek(cluster * cluster_size);
+    dev.read(sb.data(), sb.length());
 
-        relocs.emplace_back(cluster_start, cluster_end - cluster_start, addr / cluster_size);
+    dev.seek(addr);
+    dev.write(sb.data(), sb.length());
 
-        for (auto it = runs.begin(); it != runs.end(); it++) {
-            if (it->offset > addr / cluster_size) {
-                runs.emplace(it, addr / cluster_size, cluster_end - cluster_start, 0, 0, true);
-                return;
-            }
+    relocs.emplace_back(cluster, 1, addr / cluster_size);
+
+    for (auto it = runs.begin(); it != runs.end(); it++) {
+        if (it->offset > addr / cluster_size) {
+            runs.emplace(it, addr / cluster_size, 1, 0, 0, true);
+            return;
         }
-
-        runs.emplace_back(addr / cluster_size, cluster_end - cluster_start, 0, 0, true);
     }
+
+    runs.emplace_back(addr / cluster_size, 1, 0, 0, true);
 }
 
 static void protect_superblocks(ntfs& dev, list<data_alloc>& runs) {
@@ -2841,7 +2842,7 @@ static void protect_superblocks(ntfs& dev, list<data_alloc>& runs) {
         uint64_t cluster_end = sector_align(superblock_addrs[i] - (superblock_addrs[i] % stripe_length) + stripe_length, cluster_size) / cluster_size;
 
         for (uint64_t j = cluster_start; j < cluster_end; j++) {
-            protect_data(dev, runs, j, j + 1);
+            protect_cluster(dev, runs, j);
         }
 
         i++;
@@ -2849,10 +2850,10 @@ static void protect_superblocks(ntfs& dev, list<data_alloc>& runs) {
 
     // also relocate first cluster
 
-    protect_data(dev, runs, 0, 1);
+    protect_cluster(dev, runs, 0);
 
     if (reloc_last_sector)
-        protect_data(dev, runs, device_size / cluster_size, (device_size / cluster_size) + 1);
+        protect_cluster(dev, runs, device_size / cluster_size);
 }
 
 static void clear_first_cluster(ntfs& dev) {
