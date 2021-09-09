@@ -2349,36 +2349,37 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 memset(inline_data.data() + vdl, 0, (size_t)(inline_data.length() - vdl));
 
             uint64_t pos = 0;
+            string_view data = inline_data;
 
-            while (!inline_data.empty()) {
+            while (!data.empty()) {
                 uint64_t len, lcn, cl;
                 bool inserted = false;
                 string compdata;
 
-                if (compression == btrfs_compression::none || inline_data.length() <= cluster_size)
-                    len = min(max_extent_size, inline_data.length());
+                if (compression == btrfs_compression::none || data.length() <= cluster_size)
+                    len = min(max_extent_size, data.length());
 #if defined(WITH_ZLIB) || defined(WITH_LZO) || defined(WITH_ZSTD)
                 else {
                     optional<string> c;
 
-                    len = min(max_comp_extent_size, inline_data.length());
+                    len = min(max_comp_extent_size, data.length());
 
                     switch (compression) {
 #ifdef WITH_ZLIB
                         case btrfs_compression::zlib:
-                            c = zlib_compress(string_view(inline_data).substr(0, len), cluster_size);
+                            c = zlib_compress(data.substr(0, len), cluster_size);
                             break;
 #endif
 
 #ifdef WITH_LZO
                         case btrfs_compression::lzo:
-                            c = lzo_compress(string_view(inline_data).substr(0, len), cluster_size);
+                            c = lzo_compress(data.substr(0, len), cluster_size);
                             break;
 #endif
 
 #ifdef WITH_ZSTD
                         case btrfs_compression::zstd:
-                            c = zstd_compress(string_view(inline_data).substr(0, len), cluster_size);
+                            c = zstd_compress(data.substr(0, len), cluster_size);
                             break;
 #endif
                         default:
@@ -2397,7 +2398,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     if (pos == 0 && ed.compression == btrfs_compression::none) {
                         ii.flags |= BTRFS_INODE_NOCOMPRESS;
                         compression = btrfs_compression::none;
-                        len = min(max_extent_size, inline_data.length());
+                        len = min(max_extent_size, data.length());
                     }
 
                     // FIXME - set xattr for compression type?
@@ -2414,7 +2415,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 dev.seek(ed2.address - chunk_virt_offset);
 
                 if (ed.compression == btrfs_compression::none)
-                    dev.write(inline_data.data(), (size_t)len);
+                    dev.write(data.data(), (size_t)len);
                 else
                     dev.write(compdata.data(), compdata.length());
 
@@ -2436,12 +2437,14 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 if (!inserted)
                     runs.emplace_back(lcn, cl, inode, pos / cluster_size, false, true);
 
-                if (inline_data.length() > len) {
+                if (data.length() > len) {
                     pos += len;
-                    inline_data = inline_data.substr((size_t)len);
+                    data = data.substr((size_t)len);
                 } else
                     break;
             }
+
+            inline_data.clear();
         } else {
             size_t extlen = offsetof(EXTENT_DATA, data[0]) + inline_data.length();
             auto ed = (EXTENT_DATA*)malloc(extlen);
