@@ -81,6 +81,8 @@ static const uint64_t max_comp_extent_size = 0x20000; // 128 KB
 #define EA_REPARSE "user.reparse"
 #define EA_REPARSE_HASH 0xfabad1fe
 
+using runs_t = map<uint64_t, list<data_alloc>>;
+
 static void space_list_remove(list<space>& space_list, uint64_t offset, uint64_t length) {
     auto it = space_list.begin();
 
@@ -1095,7 +1097,7 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
     return r;
 }
 
-static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint64_t inode) {
+static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode) {
     INODE_ITEM ii;
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
 
@@ -1118,9 +1120,11 @@ static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint6
 //     BTRFS_TIME st_mtime;
 //     BTRFS_TIME otime;
 
-    for (const auto& run : runs) {
-        if (!run.relocated && !run.not_in_img)
-            ii.st_blocks += run.length * cluster_size;
+    for (const auto& rs : runs) {
+        for (const auto& run : rs.second) {
+            if (!run.relocated && !run.not_in_img)
+                ii.st_blocks += run.length * cluster_size;
+        }
     }
 
     add_item(r, inode, TYPE_INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
@@ -1189,31 +1193,33 @@ static void create_image(root& r, ntfs& dev, const list<data_alloc>& runs, uint6
         ed->type = EXTENT_TYPE_REGULAR;
 
         try {
-            for (const auto& run : runs) {
-                uint64_t addr;
+            for (const auto& rs : runs) {
+                for (const auto& run : rs.second) {
+                    uint64_t addr;
 
-                if (run.relocated || run.not_in_img)
-                    continue;
+                    if (run.relocated || run.not_in_img)
+                        continue;
 
-                ed->decoded_size = ed2->size = ed2->num_bytes = run.length * cluster_size;
+                    ed->decoded_size = ed2->size = ed2->num_bytes = run.length * cluster_size;
 
-                addr = run.offset * cluster_size;
+                    addr = run.offset * cluster_size;
 
-                if (run.inode == dummy_inode) {
-                    for (const auto& reloc : relocs) {
-                        if (reloc.old_start == run.offset) {
-                            ed2->address = (reloc.new_start * cluster_size) + chunk_virt_offset;
-                            break;
+                    if (run.inode == dummy_inode) {
+                        for (const auto& reloc : relocs) {
+                            if (reloc.old_start == run.offset) {
+                                ed2->address = (reloc.new_start * cluster_size) + chunk_virt_offset;
+                                break;
+                            }
                         }
-                    }
-                } else
-                    ed2->address = addr + chunk_virt_offset;
+                    } else
+                        ed2->address = addr + chunk_virt_offset;
 
-                ed2->offset = 0;
+                    ed2->offset = 0;
 
-                add_item(r, inode, TYPE_EXTENT_DATA, addr, ed, (uint16_t)extlen);
+                    add_item(r, inode, TYPE_EXTENT_DATA, addr, ed, (uint16_t)extlen);
 
-                data_size += ed2->size;
+                    data_size += ed2->size;
+                }
             }
         } catch (...) {
             free(ed);
@@ -1324,6 +1330,128 @@ static void parse_bitmap(const string& bmpdata, list<T>& runs) {
     // FIXME - remove any bits after end of volume
 }
 
+static void parse_data_bitmap(ntfs& dev, const string& bmpdata, runs_t& runs) {
+    uint64_t run_start = 0, pos = 0;
+    bool set = false;
+    string_view bdsv = bmpdata;
+
+    uint64_t clusters_per_chunk = data_chunk_size / ((uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster);
+
+    // FIXME - by 64-bits if 64-bit processor (use typedef for uint64_t/uint32_t?)
+
+    auto add_run = [&]() {
+        while (true) {
+            uint64_t chunk = run_start / clusters_per_chunk;
+
+            auto& r = runs[chunk];
+
+            if (pos / clusters_per_chunk != chunk) {
+                uint64_t len = clusters_per_chunk - (run_start % clusters_per_chunk);
+
+                r.emplace_back(run_start, len);
+                run_start += len;
+
+                if (pos == run_start)
+                    break;
+            } else {
+                r.emplace_back(run_start, pos - run_start);
+                break;
+            }
+        }
+    };
+
+    while (bdsv.size() >= sizeof(uint32_t)) {
+        auto v = *(uint32_t*)bdsv.data();
+
+        if ((!set && v == 0) || (set && v == 0xffffffff)) {
+            pos += sizeof(uint32_t) * 8;
+            bdsv = bdsv.substr(sizeof(uint32_t));
+            continue;
+        }
+
+        if (!set && v == 0xffffffff) {
+            run_start = pos;
+            set = true;
+            pos += sizeof(uint32_t) * 8;
+        } else if (set && v == 0) {
+            if (pos != run_start)
+                add_run();
+
+            set = false;
+            pos += sizeof(uint32_t) * 8;
+        } else {
+            for (unsigned int i = 0; i < sizeof(uint32_t) * 8; i++) {
+                if (v & 1) {
+                    if (!set) {
+                        run_start = pos;
+                        set = true;
+                    }
+                } else {
+                    if (set) {
+                        if (pos != run_start)
+                            add_run();
+
+                        set = false;
+                    }
+                }
+
+                v >>= 1;
+                pos++;
+            }
+        }
+
+        bdsv = bdsv.substr(sizeof(uint32_t));
+    }
+
+    while (!bdsv.empty()) {
+        auto v = *(uint8_t*)bdsv.data();
+
+        if ((!set && v == 0) || (set && v == 0xff)) {
+            pos++;
+            bdsv = bdsv.substr(1);
+            continue;
+        }
+
+        if (!set && v == 0xff) {
+            run_start = pos;
+            set = true;
+            pos += 8;
+        } else if (set && v == 0) {
+            if (pos != run_start)
+                add_run();
+
+            set = false;
+            pos += 8;
+        } else {
+            for (unsigned int i = 0; i < 8; i++) {
+                if (v & 1) {
+                    if (!set) {
+                        run_start = pos;
+                        set = true;
+                    }
+                } else {
+                    if (set) {
+                        if (pos != run_start)
+                            add_run();
+
+                        set = false;
+                    }
+                }
+
+                v >>= 1;
+                pos++;
+            }
+        }
+
+        bdsv = bdsv.substr(1);
+    }
+
+    if (set && run_start != pos)
+        add_run();
+
+    // FIXME - remove any bits after end of volume
+}
+
 static BTRFS_TIME win_time_to_unix(int64_t time) {
     uint64_t l = (uint64_t)time - 116444736000000000ULL;
     BTRFS_TIME bt;
@@ -1415,37 +1543,54 @@ static void link_inode(root& r, uint64_t inode, uint64_t dir, const string_view&
     r.dir_seqs[dir]++;
 }
 
-static bool split_runs(list<data_alloc>& runs, uint64_t offset, uint64_t length, uint64_t inode, uint64_t file_offset) {
-    for (auto it = runs.begin(); it != runs.end(); it++) {
-        auto& r = *it;
+static bool split_runs(const ntfs& dev, runs_t& runs, uint64_t offset, uint64_t length, uint64_t inode, uint64_t file_offset) {
+    uint64_t clusters_per_chunk = data_chunk_size / ((uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster);
+    bool ret = false;
 
-        if (r.offset > offset + length)
-            break;
+    while (true) {
+        uint64_t chunk = offset / clusters_per_chunk;
+        uint64_t length2 = min(length, clusters_per_chunk - (offset % clusters_per_chunk));
 
-        if (offset + length > r.offset && offset < r.offset + r.length) {
-            if (offset >= r.offset && offset + length <= r.offset + r.length) { // cut out middle
-                if (offset > r.offset)
-                    runs.emplace(it, r.offset, offset - r.offset);
+        if (runs.count(chunk) != 0) {
+            auto& rl = runs[chunk];
 
-                runs.emplace(it, offset, length, inode, file_offset, r.relocated);
+            for (auto it = rl.begin(); it != rl.end(); it++) {
+                auto& r = *it;
 
-                if (offset + length < r.offset + r.length) {
-                    r.length = r.offset + r.length - offset - length;
-                    r.offset = offset + length;
-                } else
-                    runs.erase(it);
+                if (r.offset > offset + length2)
+                    break;
 
-                return true;
+                if (offset + length2 > r.offset && offset < r.offset + r.length) {
+                    if (offset >= r.offset && offset + length2 <= r.offset + r.length) { // cut out middle
+                        if (offset > r.offset)
+                            rl.emplace(it, r.offset, offset - r.offset);
+
+                        rl.emplace(it, offset, length2, inode, file_offset, r.relocated);
+
+                        if (offset + length2 < r.offset + r.length) {
+                            r.length = r.offset + r.length - offset - length2;
+                            r.offset = offset + length2;
+                        } else
+                            rl.erase(it);
+
+                        ret = true;
+                        break;
+                    }
+
+                    throw formatted_error("Error assigning space to file. This can occur if the space bitmap has become corrupted. Run chkdsk and try again.");
+                }
             }
-
-            throw formatted_error("Error assigning space to file. This can occur if the space bitmap has become corrupted. Run chkdsk and try again.");
         }
-    }
 
-    return false;
+        if (length2 == length)
+            return ret;
+
+        offset += length2;
+        length -= length2;
+    }
 }
 
-static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& mappings, list<data_alloc>& runs) {
+static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& mappings, runs_t& runs) {
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
     uint64_t clusters_per_chunk = data_chunk_size / cluster_size;
     list<mapping> mappings2;
@@ -1489,21 +1634,23 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
             if (m.lcn + m.length > r.old_start && m.lcn < r.old_start + r.length) {
                 if (m.lcn >= r.old_start && m.lcn + m.length <= r.old_start + r.length) { // change whole mapping
                     if (r.old_start < m.lcn) { // reloc starts before mapping
-                        for (auto it2 = runs.begin(); it2 != runs.end(); it2++) {
-                            auto& r2 = *it2;
+                        for (auto& rs : runs) { // FIXME - optimize
+                            for (auto it2 = rs.second.begin(); it2 != rs.second.end(); it2++) {
+                                auto& r2 = *it2;
 
-                            if (r2.offset == r.old_start) {
-                                runs.emplace(it2, r2.offset, m.lcn - r2.offset, dummy_inode);
+                                if (r2.offset == r.old_start) {
+                                    rs.second.emplace(it2, r2.offset, m.lcn - r2.offset, dummy_inode);
 
-                                r2.length -= m.lcn - r2.offset;
-                                r2.offset = m.lcn;
-                            }
+                                    r2.length -= m.lcn - r2.offset;
+                                    r2.offset = m.lcn;
+                                }
 
-                            if (r2.offset == r.new_start) {
-                                runs.emplace(it2, r2.offset, m.lcn - r.old_start, 0, 0, true);
+                                if (r2.offset == r.new_start) {
+                                    rs.second.emplace(it2, r2.offset, m.lcn - r.old_start, 0, 0, true);
 
-                                r2.offset += m.lcn - r.old_start;
-                                r2.length -= m.lcn - r.old_start;
+                                    r2.offset += m.lcn - r.old_start;
+                                    r2.length -= m.lcn - r.old_start;
+                                }
                             }
                         }
 
@@ -1520,21 +1667,23 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
 
                         r.length = m.lcn + m.length - r.old_start;
 
-                        for (auto it2 = runs.begin(); it2 != runs.end(); it2++) {
-                            auto& r2 = *it2;
+                        for (auto& rs : runs) { // FIXME - optimize
+                            for (auto it2 = rs.second.begin(); it2 != rs.second.end(); it2++) {
+                                auto& r2 = *it2;
 
-                            if (r2.offset == r.old_start) {
-                                runs.emplace(it2, r.old_start, m.lcn + m.length - r.old_start, dummy_inode);
+                                if (r2.offset == r.old_start) {
+                                    rs.second.emplace(it2, r.old_start, m.lcn + m.length - r.old_start, dummy_inode);
 
-                                r2.length -= m.lcn + m.length - r2.offset;
-                                r2.offset = m.lcn + m.length;
-                            }
+                                    r2.length -= m.lcn + m.length - r2.offset;
+                                    r2.offset = m.lcn + m.length;
+                                }
 
-                            if (r2.offset == r.new_start) {
-                                runs.emplace(it2, r2.offset, m.lcn + m.length - r.old_start, 0, 0, true);
+                                if (r2.offset == r.new_start) {
+                                    rs.second.emplace(it2, r2.offset, m.lcn + m.length - r.old_start, 0, 0, true);
 
-                                r2.offset += m.lcn + m.length - r.old_start;
-                                r2.length -= m.lcn + m.length - r.old_start;
+                                    r2.offset += m.lcn + m.length - r.old_start;
+                                    r2.length -= m.lcn + m.length - r.old_start;
+                                }
                             }
                         }
                     }
@@ -1571,38 +1720,48 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
 
                         r.length = m.length;
 
-                        for (auto it2 = runs.begin(); it2 != runs.end(); it2++) {
-                            auto& r2 = *it2;
+                        for (auto& rs : runs) { // FIXME - optimize
+                            bool found = false;
 
-                            if (r2.offset == r.old_start) {
-                                runs.emplace(it2, r2.offset, m.length, dummy_inode);
+                            for (auto it2 = rs.second.begin(); it2 != rs.second.end(); it2++) {
+                                auto& r2 = *it2;
 
-                                r2.offset += m.length;
-                                r2.length -= m.length;
+                                if (r2.offset == r.old_start) {
+                                    rs.second.emplace(it2, r2.offset, m.length, dummy_inode);
 
-                                break;
+                                    r2.offset += m.length;
+                                    r2.length -= m.length;
+
+                                    found = true;
+                                    break;
+                                }
                             }
+
+                            if (found)
+                                break;
                         }
                     }
                 } else if (m.lcn > r.old_start && m.lcn + m.length > r.old_start + r.length) { // change beginning
                     auto orig_r = r;
 
                     if (r.old_start < m.lcn) {
-                        for (auto it2 = runs.begin(); it2 != runs.end(); it2++) {
-                            auto& r2 = *it2;
+                        for (auto& rs : runs) { // FIXME - optimize
+                            for (auto it2 = rs.second.begin(); it2 != rs.second.end(); it2++) {
+                                auto& r2 = *it2;
 
-                            if (r2.offset == r.old_start) {
-                                runs.emplace(it2, r2.offset, m.lcn - r2.offset, dummy_inode);
+                                if (r2.offset == r.old_start) {
+                                    rs.second.emplace(it2, r2.offset, m.lcn - r2.offset, dummy_inode);
 
-                                r2.length -= m.lcn - r2.offset;
-                                r2.offset = m.lcn;
-                            }
+                                    r2.length -= m.lcn - r2.offset;
+                                    r2.offset = m.lcn;
+                                }
 
-                            if (r2.offset == r.new_start) {
-                                runs.emplace(it2, r2.offset, m.lcn - r.old_start, 0, 0, true);
+                                if (r2.offset == r.new_start) {
+                                    rs.second.emplace(it2, r2.offset, m.lcn - r.old_start, 0, 0, true);
 
-                                r2.offset += m.lcn - r.old_start;
-                                r2.length -= m.lcn - r.old_start;
+                                    r2.offset += m.lcn - r.old_start;
+                                    r2.length -= m.lcn - r.old_start;
+                                }
                             }
                         }
 
@@ -1622,7 +1781,7 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
     }
 
     for (const auto& m : mappings) {
-        split_runs(runs, m.lcn, m.length, inode, m.vcn);
+        split_runs(dev, runs, m.lcn, m.length, inode, m.vcn);
     }
 }
 
@@ -1700,7 +1859,7 @@ static bool string_eq_ci(const string_view& s1, const string_view& s2) {
     return true;
 }
 
-static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir, list<data_alloc>& runs,
+static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir, runs_t& runs,
                       ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist, enum btrfs_compression opt_compression) {
     INODE_ITEM ii;
     uint64_t file_size = 0;
@@ -2424,18 +2583,20 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 lcn = (ed2.address - chunk_virt_offset) / cluster_size;
                 cl = ed2.size / cluster_size;
 
-                for (auto it = runs.begin(); it != runs.end(); it++) {
+                auto& rl = runs[(ed2.address - chunk_virt_offset) / data_chunk_size];
+
+                for (auto it = rl.begin(); it != rl.end(); it++) {
                     auto& r = *it;
 
                     if (r.offset >= lcn + cl) {
-                        runs.emplace(it, lcn, cl, inode, pos / cluster_size, false, true);
+                        rl.emplace(it, lcn, cl, inode, pos / cluster_size, false, true);
                         inserted = true;
                         break;
                     }
                 }
 
                 if (!inserted)
-                    runs.emplace_back(lcn, cl, inode, pos / cluster_size, false, true);
+                    rl.emplace_back(lcn, cl, inode, pos / cluster_size, false, true);
 
                 if (data.length() > len) {
                     pos += len;
@@ -2527,7 +2688,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     }
 }
 
-static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_alloc>& runs, ntfs_file& secure,
+static void create_inodes(root& r, const string& mftbmp, ntfs& dev, runs_t& runs, ntfs_file& secure,
                           enum btrfs_compression compression) {
     list<space> inodes;
     list<uint64_t> skiplist;
@@ -2572,76 +2733,78 @@ static void create_inodes(root& r, const string& mftbmp, ntfs& dev, list<data_al
     fmt::print("\n");
 }
 
-static void create_data_extent_items(root& extent_root, const list<data_alloc>& runs, uint32_t cluster_size, uint64_t image_subvol_id,
+static void create_data_extent_items(root& extent_root, const runs_t& runs, uint32_t cluster_size, uint64_t image_subvol_id,
                                      uint64_t image_inode) {
-    for (const auto& r : runs) {
-        uint64_t img_addr;
+    for (const auto& rs : runs) {
+        for (const auto& r : rs.second) {
+            uint64_t img_addr;
 
-        if (r.inode == dummy_inode)
-            continue;
+            if (r.inode == dummy_inode)
+                continue;
 
-        if (r.relocated) {
-            for (const auto& reloc : relocs) {
-                if (reloc.new_start == r.offset) {
-                    img_addr = reloc.old_start * cluster_size;
-                    break;
+            if (r.relocated) {
+                for (const auto& reloc : relocs) {
+                    if (reloc.new_start == r.offset) {
+                        img_addr = reloc.old_start * cluster_size;
+                        break;
+                    }
                 }
+            } else
+                img_addr = r.offset * cluster_size;
+
+            if (r.inode == 0) {
+                data_item di;
+
+                di.extent_item.refcount = 1;
+                di.extent_item.generation = 1;
+                di.extent_item.flags = EXTENT_ITEM_DATA;
+                di.type = TYPE_EXTENT_DATA_REF;
+                di.edr.root = image_subvol_id;
+                di.edr.objid = image_inode;
+                di.edr.count = 1;
+                di.edr.offset = img_addr;
+
+                add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
+                         &di, sizeof(data_item));
+            } else if (r.not_in_img) {
+                data_item di;
+
+                di.extent_item.refcount = 1;
+                di.extent_item.generation = 1;
+                di.extent_item.flags = EXTENT_ITEM_DATA;
+                di.type = TYPE_EXTENT_DATA_REF;
+                di.edr.root = BTRFS_ROOT_FSTREE;
+                di.edr.objid = r.inode;
+                di.edr.count = 1;
+                di.edr.offset = r.file_offset * cluster_size;
+
+                add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
+                         &di, sizeof(data_item));
+            } else {
+                data_item2 di2;
+
+                di2.extent_item.refcount = 2;
+                di2.extent_item.generation = 1;
+                di2.extent_item.flags = EXTENT_ITEM_DATA;
+                di2.type1 = TYPE_EXTENT_DATA_REF;
+                di2.edr1.root = image_subvol_id;
+                di2.edr1.objid = image_inode;
+                di2.edr1.count = 1;
+                di2.edr1.offset = img_addr;
+                di2.type2 = TYPE_EXTENT_DATA_REF;
+                di2.edr2.root = BTRFS_ROOT_FSTREE;
+                di2.edr2.objid = r.inode;
+                di2.edr2.count = 1;
+                di2.edr2.offset = r.file_offset * cluster_size;
+
+                add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
+                         &di2, sizeof(data_item2));
             }
-        } else
-            img_addr = r.offset * cluster_size;
-
-        if (r.inode == 0) {
-            data_item di;
-
-            di.extent_item.refcount = 1;
-            di.extent_item.generation = 1;
-            di.extent_item.flags = EXTENT_ITEM_DATA;
-            di.type = TYPE_EXTENT_DATA_REF;
-            di.edr.root = image_subvol_id;
-            di.edr.objid = image_inode;
-            di.edr.count = 1;
-            di.edr.offset = img_addr;
-
-            add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
-                     &di, sizeof(data_item));
-        } else if (r.not_in_img) {
-            data_item di;
-
-            di.extent_item.refcount = 1;
-            di.extent_item.generation = 1;
-            di.extent_item.flags = EXTENT_ITEM_DATA;
-            di.type = TYPE_EXTENT_DATA_REF;
-            di.edr.root = BTRFS_ROOT_FSTREE;
-            di.edr.objid = r.inode;
-            di.edr.count = 1;
-            di.edr.offset = r.file_offset * cluster_size;
-
-            add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
-                     &di, sizeof(data_item));
-        } else {
-            data_item2 di2;
-
-            di2.extent_item.refcount = 2;
-            di2.extent_item.generation = 1;
-            di2.extent_item.flags = EXTENT_ITEM_DATA;
-            di2.type1 = TYPE_EXTENT_DATA_REF;
-            di2.edr1.root = image_subvol_id;
-            di2.edr1.objid = image_inode;
-            di2.edr1.count = 1;
-            di2.edr1.offset = img_addr;
-            di2.type2 = TYPE_EXTENT_DATA_REF;
-            di2.edr2.root = BTRFS_ROOT_FSTREE;
-            di2.edr2.objid = r.inode;
-            di2.edr2.count = 1;
-            di2.edr2.offset = r.file_offset * cluster_size;
-
-            add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
-                     &di2, sizeof(data_item2));
         }
     }
 }
 
-static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, enum btrfs_csum_type csum_type) {
+static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_csum_type csum_type) {
     uint32_t sector_size = 0x1000; // FIXME
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     list<space> runs2;
@@ -2670,40 +2833,44 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, en
     // split and merge runs
     // FIXME - do we need to force a break at a chunk boundary?
 
-    while (!runs.empty()) {
-        auto& r = runs.front();
+    for (auto& r : runs) {
+        auto& rs = r.second;
 
-        if (r.inode == dummy_inode) {
-            runs.pop_front();
-            continue;
-        }
+        while (!rs.empty()) {
+            auto& r = rs.front();
 
-        if (runs2.empty() || runs2.back().offset + runs2.back().length < r.offset || runs2.back().length == max_run) {
-            // create new run
-
-            if (r.length > max_run) {
-                runs2.emplace_back(r.offset, max_run);
-                r.offset += max_run;
-                r.length -= max_run;
-            } else {
-                runs2.emplace_back(r.offset, r.length);
-                runs.pop_front();
+            if (r.inode == dummy_inode) {
+                rs.pop_front();
+                continue;
             }
 
-            continue;
+            if (runs2.empty() || runs2.back().offset + runs2.back().length < r.offset || runs2.back().length == max_run) {
+                // create new run
+
+                if (r.length > max_run) {
+                    runs2.emplace_back(r.offset, max_run);
+                    r.offset += max_run;
+                    r.length -= max_run;
+                } else {
+                    runs2.emplace_back(r.offset, r.length);
+                    rs.pop_front();
+                }
+
+                continue;
+            }
+
+            // continue existing run
+
+            if (runs2.back().length + r.length <= max_run) {
+                runs2.back().length += r.length;
+                rs.pop_front();
+                continue;
+            }
+
+            r.offset += max_run - runs2.back().length;
+            r.length -= max_run - runs2.back().length;
+            runs2.back().length = max_run;
         }
-
-        // continue existing run
-
-        if (runs2.back().length + r.length <= max_run) {
-            runs2.back().length += r.length;
-            runs.pop_front();
-            continue;
-        }
-
-        r.offset += max_run - runs2.back().length;
-        r.length -= max_run - runs2.back().length;
-        runs2.back().length = max_run;
     }
 
     for (const auto& r : runs2) {
@@ -2802,8 +2969,8 @@ static void calc_checksums(root& csum_root, list<data_alloc> runs, ntfs& dev, en
     fmt::print("\n");
 }
 
-static void protect_cluster(ntfs& dev, list<data_alloc>& runs, uint64_t cluster) {
-    if (!split_runs(runs, cluster, 1, dummy_inode, 0))
+static void protect_cluster(ntfs& dev, runs_t& runs, uint64_t cluster) {
+    if (!split_runs(dev, runs, cluster, 1, dummy_inode, 0))
         return;
 
     string sb;
@@ -2823,17 +2990,26 @@ static void protect_cluster(ntfs& dev, list<data_alloc>& runs, uint64_t cluster)
 
     relocs.emplace_back(cluster, 1, addr / cluster_size);
 
-    for (auto it = runs.begin(); it != runs.end(); it++) {
-        if (it->offset > addr / cluster_size) {
-            runs.emplace(it, addr / cluster_size, 1, 0, 0, true);
-            return;
+    uint64_t clusters_per_chunk = data_chunk_size / (uint64_t) cluster_size;
+    uint64_t chunk = cluster / clusters_per_chunk;
+
+    if (runs.count(chunk) != 0) {
+        auto& r = runs.at(chunk);
+
+        for (auto it = r.begin(); it != r.end(); it++) {
+            if (it->offset > addr / cluster_size) {
+                r.emplace(it, addr / cluster_size, 1, 0, 0, true);
+                return;
+            }
         }
     }
 
-    runs.emplace_back(addr / cluster_size, 1, 0, 0, true);
+    auto& r = runs[chunk];
+
+    r.emplace_back(addr / cluster_size, 1, 0, 0, true);
 }
 
-static void protect_superblocks(ntfs& dev, list<data_alloc>& runs) {
+static void protect_superblocks(ntfs& dev, runs_t& runs) {
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
 
     unsigned int i = 0;
@@ -2871,56 +3047,19 @@ static void clear_first_cluster(ntfs& dev) {
     dev.write(data.data(), data.length());
 }
 
-static void calc_used_space(list<data_alloc>& runs, uint32_t cluster_size) {
-    list<data_alloc> runs2;
-    uint64_t clusters_per_chunk = data_chunk_size / cluster_size;
+static void calc_used_space(const runs_t& runs, uint32_t cluster_size) {
+    for (const auto& rl : runs) {
+        uint64_t offset = (rl.first * data_chunk_size) + chunk_virt_offset;
 
-    // split runs on chunk boundaries
-
-    for (const auto& r : runs) {
-        uint64_t chunk_start = r.offset / clusters_per_chunk;
-        uint64_t chunk_end = ((r.offset + r.length) - 1) / clusters_per_chunk;
-
-        if (chunk_end > chunk_start) {
-            uint64_t start = r.offset;
-
-            do {
-                uint64_t end = min((((start / clusters_per_chunk) + 1) * clusters_per_chunk), r.offset + r.length);
-
-                if (end == start)
-                    break;
-
-                runs2.emplace_back(start, end - start, r.inode, r.file_offset + ((start - r.offset) * cluster_size), r.relocated);
-
-                start = end;
-            } while (true);
-        } else
-            runs2.emplace_back(r.offset, r.length, r.inode, r.file_offset, r.relocated);
-    }
-
-    runs.clear();
-    runs.splice(runs.begin(), runs2);
-
-    chunk* c = nullptr;
-
-    for (const auto& r : runs) {
-        if (!c || ((r.offset - (r.offset % clusters_per_chunk)) * cluster_size) + chunk_virt_offset != c->offset) {
-            uint64_t off = (r.offset - (r.offset % clusters_per_chunk)) * cluster_size;
-
-            c = nullptr;
-
-            for (auto& c2 : chunks) {
-                if (c2.offset == off + chunk_virt_offset) {
-                    c = &c2;
-                    break;
+        for (auto& c : chunks) {
+            if (offset == c.offset) {
+                for (const auto& r : rl.second) {
+                    c.used += r.length * cluster_size;
                 }
+
+                break;
             }
-
-            if (!c)
-                throw formatted_error("Could not find chunk."); // FIXME - include address
         }
-
-        c->used += r.length * cluster_size;
     }
 }
 
@@ -2994,7 +3133,7 @@ static void update_dir_sizes(root& r) {
 static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_csum_type csum_type) {
     uint32_t sector_size = 0x1000; // FIXME
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
-    list<data_alloc> runs;
+    runs_t runs;
 
     static const uint64_t image_inode = 0x101;
 
@@ -3055,20 +3194,22 @@ static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_cs
 
     root& image_subvol = add_image_subvol(root_root, fstree_root);
 
-    parse_bitmap(bmpdata, runs);
+    parse_data_bitmap(dev, bmpdata, runs);
 
     // make sure runs don't go beyond end of device
 
-    while (!runs.empty() && (runs.back().offset * cluster_size) + runs.back().length > device_size) {
-        if (runs.back().offset * cluster_size >= orig_device_size)
-            runs.pop_back();
+    while (!runs.empty() && (runs.rbegin()->second.back().offset * cluster_size) + runs.rbegin()->second.back().length > device_size) {
+        auto& r = runs.rbegin()->second;
+
+        if (r.back().offset * cluster_size >= orig_device_size)
+            r.pop_back();
         else {
-            uint64_t len = orig_device_size - (runs.back().offset * cluster_size);
+            uint64_t len = orig_device_size - (r.back().offset * cluster_size);
 
             if (len % cluster_size)
-                runs.back().length = (len / cluster_size) + 1;
+                r.back().length = (len / cluster_size) + 1;
             else
-                runs.back().length = len / cluster_size;
+                r.back().length = len / cluster_size;
 
             break;
         }
