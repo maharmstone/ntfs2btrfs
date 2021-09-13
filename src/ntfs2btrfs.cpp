@@ -2831,10 +2831,10 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
     // FIXME - these are clusters, when they should be sectors
 
     // split and merge runs
-    // FIXME - do we need to force a break at a chunk boundary?
 
     for (auto& r : runs) {
         auto& rs = r.second;
+        bool first = true;
 
         while (!rs.empty()) {
             auto& r = rs.front();
@@ -2844,7 +2844,7 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
                 continue;
             }
 
-            if (runs2.empty() || runs2.back().offset + runs2.back().length < r.offset || runs2.back().length == max_run) {
+            if (first || runs2.back().offset + runs2.back().length < r.offset || runs2.back().length == max_run) {
                 // create new run
 
                 if (r.length > max_run) {
@@ -2855,6 +2855,8 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
                     runs2.emplace_back(r.offset, r.length);
                     rs.pop_front();
                 }
+
+                first = false;
 
                 continue;
             }
