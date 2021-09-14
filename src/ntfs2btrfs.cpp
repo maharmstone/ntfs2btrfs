@@ -2826,7 +2826,9 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
             break;
     }
 
-    auto max_run = (uint32_t)((tree_size - sizeof(tree_header) - sizeof(leaf_node)) / csum_size);
+    // See __MAX_CSUM_ITEMS in kernel
+
+    auto max_run = (uint32_t)((tree_size - sizeof(tree_header) - (sizeof(leaf_node) * 2)) / csum_size) - 1;
 
     // FIXME - these are clusters, when they should be sectors
 
