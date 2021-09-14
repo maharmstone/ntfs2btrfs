@@ -2997,8 +2997,8 @@ static void protect_cluster(ntfs& dev, runs_t& runs, uint64_t cluster) {
 
     relocs.emplace_back(cluster, 1, addr / cluster_size);
 
-    uint64_t clusters_per_chunk = data_chunk_size / (uint64_t) cluster_size;
-    uint64_t chunk = cluster / clusters_per_chunk;
+    uint64_t clusters_per_chunk = data_chunk_size / (uint64_t)cluster_size;
+    uint64_t chunk = (addr / (uint64_t)cluster_size) / clusters_per_chunk;
 
     if (runs.count(chunk) != 0) {
         auto& r = runs.at(chunk);
