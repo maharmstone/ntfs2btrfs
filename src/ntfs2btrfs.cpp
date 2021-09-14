@@ -3456,7 +3456,7 @@ Convert an NTFS filesystem to Btrfs.
                 break;
 
             case btrfs_compression::zstd:
-                fmt::print("Using LZO compression.\n");
+                fmt::print("Using Zstd compression.\n");
                 break;
 
             case btrfs_compression::none:
