@@ -708,10 +708,10 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
     if (sys_chunk_size > SYS_CHUNK_ARRAY_SIZE)
         throw formatted_error("System chunk list was too long ({} > {}).", sys_chunk_size, SYS_CHUNK_ARRAY_SIZE);
 
-    total_used = data_size;
+    total_used = 0;
 
-    for (const auto& r : roots) {
-        total_used += r.metadata_size;
+    for (const auto& c : chunks) {
+        total_used += c.used;
     }
 
     sb.uuid = fs_uuid;
