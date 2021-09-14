@@ -2515,10 +2515,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 bool inserted = false;
                 string compdata;
 
-                if (compression == btrfs_compression::none || data.length() <= cluster_size)
+                if (compression == btrfs_compression::none)
                     len = min(max_extent_size, data.length());
 #if defined(WITH_ZLIB) || defined(WITH_LZO) || defined(WITH_ZSTD)
-                else {
+                else if (data.length() <= cluster_size) {
+                    len = min(max_extent_size, data.length());
+                    ed.compression = btrfs_compression::none;
+                } else {
                     optional<string> c;
 
                     len = min(max_comp_extent_size, data.length());
