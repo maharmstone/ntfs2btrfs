@@ -2571,7 +2571,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 ed2.size = ed.compression == btrfs_compression::none ? len : compdata.length();
                 ii.st_blocks += ed.decoded_size;
 
-                ed2.address = allocate_data(len, true);
+                ed2.address = allocate_data(ed2.size, true);
                 ed2.offset = 0;
 
                 dev.seek(ed2.address - chunk_virt_offset);
