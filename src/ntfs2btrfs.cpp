@@ -56,6 +56,7 @@ BTRFS_UUID fs_uuid, chunk_uuid, dev_uuid, subvol_uuid;
 list<relocation> relocs;
 uint64_t device_size, orig_device_size;
 bool reloc_last_sector = false;
+uint64_t mapped_inodes = 0, rewritten_inodes = 0, inline_inodes = 0;
 
 static const uint64_t stripe_length = 0x10000;
 static const uint64_t chunk_virt_offset = 0x100000;
@@ -2405,6 +2406,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         if (!ed)
             throw bad_alloc();
 
+        mapped_inodes++;
+
         auto ed2 = (EXTENT_DATA2*)&ed->data;
 
         ed->generation = 1;
@@ -2487,6 +2490,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             auto& ed = *(EXTENT_DATA*)buf.data();
             auto& ed2 = *(EXTENT_DATA2*)&ed.data;
+
+            rewritten_inodes++;
 
             ed.generation = 1;
             ed.compression = btrfs_compression::none;
@@ -2614,6 +2619,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             auto ed = (EXTENT_DATA*)malloc(extlen);
             if (!ed)
                 throw bad_alloc();
+
+            inline_inodes++;
 
             // FIXME - compress inline extents?
 
@@ -3242,6 +3249,10 @@ static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_cs
 
         create_inodes(fstree_root, mftbmp, dev, runs, secure, compression);
     }
+
+    fmt::print("Mapped {} inodes directly.\n", mapped_inodes);
+    fmt::print("Rewrote {} inodes.\n", rewritten_inodes);
+    fmt::print("Inlined {} inodes.\n", inline_inodes);
 
     create_image(image_subvol, dev, runs, image_inode);
 
