@@ -117,8 +117,25 @@ static void space_list_remove(list<space>& space_list, uint64_t offset, uint64_t
     }
 }
 
+static void remove_superblocks(chunk& c) {
+    unsigned int i = 0;
+
+    // FIXME - DUP
+
+    while (superblock_addrs[i] != 0) {
+        if (c.disk_start + c.length > superblock_addrs[i] && c.disk_start < superblock_addrs[i] + stripe_length) {
+            uint64_t start = max(c.offset, superblock_addrs[i] - c.disk_start + c.offset);
+            uint64_t end = min(c.offset + c.length, superblock_addrs[i] + stripe_length - c.disk_start + c.offset);
+
+            space_list_remove(c.space_list, start, end - start);
+        }
+
+        i++;
+    }
+}
+
 static void create_data_chunks(ntfs& dev, const string& bmpdata) {
-    uint64_t clusters_per_chunk = data_chunk_size / ((uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster);
+    uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
     uint64_t addr = 0;
 
     // FIXME - make sure clusters_per_chunk is multiple of 8
@@ -128,43 +145,125 @@ static void create_data_chunks(ntfs& dev, const string& bmpdata) {
     // FIXME - make sure we stop at disk end - don't create a chunk at end purely because of NTFS overround
 
     while (bdsv.length() > 0) {
+        uint64_t chunk_length = min(device_size - addr, data_chunk_size);
+        uint64_t clusters_per_chunk = chunk_length / cluster_size;
         string_view csv = bdsv.substr(0, (size_t)(clusters_per_chunk / 8));
         size_t len = csv.length();
-        bool chunk_used = false;
+        uint64_t run_start = 0, pos = 0;
+        bool set = false;
+        list<space> used;
+
+        if (chunk_length % stripe_length != 0)
+            chunk_length -= chunk_length % stripe_length;
 
         // FIXME - do by uint64_t if 64-bit processor?
-        while (csv.length() >= sizeof(uint32_t)) {
+        while (csv.size() >= sizeof(uint32_t)) {
             auto v = *(uint32_t*)csv.data();
 
-            if (v != 0) {
-                chunk_used = true;
-                break;
+            if ((!set && v == 0) || (set && v == 0xffffffff)) {
+                pos += sizeof(uint32_t) * 8;
+                csv = csv.substr(sizeof(uint32_t));
+                continue;
+            }
+
+            if (!set && v == 0xffffffff) {
+                run_start = pos;
+                set = true;
+                pos += sizeof(uint32_t) * 8;
+            } else if (set && v == 0) {
+                if (pos != run_start)
+                    used.emplace_back(run_start, pos - run_start);
+
+                set = false;
+                pos += sizeof(uint32_t) * 8;
+            } else {
+                for (unsigned int i = 0; i < sizeof(uint32_t) * 8; i++) {
+                    if (v & 1) {
+                        if (!set) {
+                            run_start = pos;
+                            set = true;
+                        }
+                    } else {
+                        if (set) {
+                            if (pos != run_start)
+                                used.emplace_back(run_start, pos - run_start);
+
+                            set = false;
+                        }
+                    }
+
+                    v >>= 1;
+                    pos++;
+                }
             }
 
             csv = csv.substr(sizeof(uint32_t));
         }
 
-        if (!chunk_used) {
-            while (!csv.empty()) {
-                auto v = *(uint8_t*)csv.data();
+        while (!csv.empty()) {
+            auto v = *(uint8_t*)csv.data();
 
-                if (v != 0) {
-                    chunk_used = true;
-                    break;
-                }
-
+            if ((!set && v == 0) || (set && v == 0xff)) {
+                pos++;
                 csv = csv.substr(1);
+                continue;
             }
+
+            if (!set && v == 0xff) {
+                run_start = pos;
+                set = true;
+                pos += 8;
+            } else if (set && v == 0) {
+                if (pos != run_start)
+                    used.emplace_back(run_start, pos - run_start);
+
+                set = false;
+                pos += 8;
+            } else {
+                for (unsigned int i = 0; i < 8; i++) {
+                    if (v & 1) {
+                        if (!set) {
+                            run_start = pos;
+                            set = true;
+                        }
+                    } else {
+                        if (set) {
+                            if (pos != run_start)
+                                used.emplace_back(run_start, pos - run_start);
+
+                            set = false;
+                        }
+                    }
+
+                    v >>= 1;
+                    pos++;
+                }
+            }
+
+            csv = csv.substr(1);
         }
 
-        if (chunk_used) {
-            uint64_t length = min(device_size - addr, data_chunk_size);
+        if (set && run_start != pos)
+            used.emplace_back(run_start, pos - run_start);
 
-            if (length % stripe_length != 0)
-                length -= length % stripe_length;
+        if (!used.empty()) {
+            space_list_remove(space_list, addr, chunk_length);
+            chunks.emplace_back(addr + chunk_virt_offset, chunk_length, addr, BLOCK_FLAG_DATA);
 
-            space_list_remove(space_list, addr, length);
-            chunks.emplace_back(addr + chunk_virt_offset, length, addr, BLOCK_FLAG_DATA);
+            auto& c = chunks.back();
+            uint64_t last = 0;
+
+            for (const auto& u : used) {
+                if (u.offset > last)
+                    c.space_list.emplace_back(c.offset + (last * cluster_size), (u.offset - last) * cluster_size);
+
+                last = u.offset + u.length;
+            }
+
+            if (last * cluster_size < chunk_length)
+                c.space_list.emplace_back(c.offset + (last * cluster_size), chunk_length - (last * cluster_size));
+
+            remove_superblocks(c);
         }
 
         addr += data_chunk_size;
@@ -218,23 +317,6 @@ static void add_chunk(root& chunk_root, root& devtree_root, root& extent_root, c
     // bgi.used gets set in update_extent_root
 
     add_item(extent_root, c.offset, TYPE_BLOCK_GROUP_ITEM, c.length, &bgi, sizeof(BLOCK_GROUP_ITEM));
-}
-
-static void remove_superblocks(chunk& c) {
-    unsigned int i = 0;
-
-    // FIXME - DUP
-
-    while (superblock_addrs[i] != 0) {
-        if (c.disk_start + c.length > superblock_addrs[i] && c.disk_start < superblock_addrs[i] + stripe_length) {
-            uint64_t start = max(c.offset, superblock_addrs[i] - c.disk_start + c.offset);
-            uint64_t end = min(c.offset + c.length, superblock_addrs[i] + stripe_length - c.disk_start + c.offset);
-
-            space_list_remove(c.space_list, start, end - start);
-        }
-
-        i++;
-    }
 }
 
 static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) {
