@@ -142,9 +142,7 @@ static void create_data_chunks(ntfs& dev, const string& bmpdata) {
 
     string_view bdsv = bmpdata;
 
-    // FIXME - make sure we stop at disk end - don't create a chunk at end purely because of NTFS overround
-
-    while (bdsv.length() > 0) {
+    while (bdsv.length() > 0 && addr < device_size) {
         uint64_t chunk_length = min(device_size - addr, data_chunk_size);
         uint64_t clusters_per_chunk = chunk_length / cluster_size;
         string_view csv = bdsv.substr(0, (size_t)(clusters_per_chunk / 8));
