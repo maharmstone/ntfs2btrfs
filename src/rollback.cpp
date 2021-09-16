@@ -293,7 +293,45 @@ void rollback(const string& fn) {
     if (inode == 0)
         throw formatted_error("Could not find {} in subvol {:x}.", image_filename, image_subvol_id);
 
-    // FIXME - parse extent items
+    // parse extent data
+
+    map<uint64_t, pair<uint64_t, uint64_t>> extents;
+
+    b.walk_tree(img_root_addr, [&](const KEY& key, const string_view& data) {
+        if (key.obj_id > inode || (key.obj_id == inode && key.obj_type > TYPE_EXTENT_DATA))
+            return false;
+
+        if (key.obj_id != inode || key.obj_type != TYPE_EXTENT_DATA)
+            return true;
+
+        const auto& ed = *(EXTENT_DATA*)data.data();
+
+        if (ed.compression != btrfs_compression::none)
+            throw runtime_error("NTFS image has been compressed, cannot process.");
+
+        if (ed.type == btrfs_extent_type::prealloc)
+            return true; // treat as if sparse
+
+        if (ed.type == btrfs_extent_type::inline_extent)
+            throw runtime_error("NTFS image has inline extents, cannot process.");
+
+        if (ed.type != btrfs_extent_type::regular)
+            throw formatted_error("Unknown extent type {}.", (unsigned int)ed.type);
+
+        const auto& ed2 = *(EXTENT_DATA2*)ed.data;
+
+        if (ed2.address == 0 && ed2.size == 0)
+            return true; // sparse, skip
+
+        extents.emplace(key.offset, make_pair(ed2.address, ed2.size));
+
+        return true;
+    });
+
+    for (const auto& e : extents) {
+        fmt::print("{:x}, {:x}, {:x}\n", e.first, e.second.first, e.second.second);
+    }
+
     // FIXME - resolve logical addresses to physical
     // FIXME - remove identity maps
     // FIXME - copy over relocations

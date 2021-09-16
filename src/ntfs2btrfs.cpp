@@ -1268,7 +1268,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
         ed->compression = btrfs_compression::none;
         ed->encryption = 0;
         ed->encoding = 0;
-        ed->type = EXTENT_TYPE_REGULAR;
+        ed->type = btrfs_extent_type::regular;
 
         try {
             for (const auto& rs : runs) {
@@ -2491,7 +2491,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         ed->compression = btrfs_compression::none;
         ed->encryption = 0;
         ed->encoding = 0;
-        ed->type = EXTENT_TYPE_REGULAR;
+        ed->type = btrfs_extent_type::regular;
 
         try {
             process_mappings(dev, inode, mappings, runs);
@@ -2574,7 +2574,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             ed.compression = btrfs_compression::none;
             ed.encryption = 0;
             ed.encoding = 0;
-            ed.type = EXTENT_TYPE_REGULAR;
+            ed.type = btrfs_extent_type::regular;
 
             // round to nearest sector, and zero end
 
@@ -2706,7 +2706,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             ed->compression = btrfs_compression::none;
             ed->encryption = 0;
             ed->encoding = 0;
-            ed->type = EXTENT_TYPE_INLINE;
+            ed->type = btrfs_extent_type::inline_extent;
 
             memcpy(ed->data, inline_data.data(), inline_data.length());
 

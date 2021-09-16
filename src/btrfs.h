@@ -69,9 +69,11 @@ enum class btrfs_compression : uint8_t {
 
 #define BTRFS_ENCODING_NONE     0
 
-#define EXTENT_TYPE_INLINE      0
-#define EXTENT_TYPE_REGULAR     1
-#define EXTENT_TYPE_PREALLOC    2
+enum class btrfs_extent_type : uint8_t {
+    inline_extent = 0,
+    regular = 1,
+    prealloc = 2
+};
 
 #define BLOCK_FLAG_DATA         0x001
 #define BLOCK_FLAG_SYSTEM       0x002
@@ -351,7 +353,7 @@ typedef struct {
     enum btrfs_compression compression;
     uint8_t encryption;
     uint16_t encoding;
-    uint8_t type;
+    enum btrfs_extent_type type;
     uint8_t data[1];
 } EXTENT_DATA;
 
