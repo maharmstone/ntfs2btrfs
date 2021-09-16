@@ -3482,6 +3482,7 @@ Convert an NTFS filesystem to Btrfs.
                                'lzo', 'zstd', or 'none'.
   -h, --hash=ALGO            checksum algorithm to use; ALGO can be 'crc32c'
                                 (default), 'xxhash', 'sha256', or 'blake2'
+  -r, --rollback             rollback to the original filesystem
 )");
             return 1;
         }
@@ -3489,6 +3490,7 @@ Convert an NTFS filesystem to Btrfs.
         string fn;
         enum btrfs_compression compression;
         enum btrfs_csum_type csum_type;
+        bool do_rollback = false;
 
 #ifdef WITH_ZSTD
         compression = btrfs_compression::zstd;
@@ -3522,6 +3524,8 @@ Convert an NTFS filesystem to Btrfs.
                     i++;
                 } else if (arg.substr(0, 7) == "--hash=")
                     csum_type = parse_csum_type(arg.substr(11));
+                else if (arg == "-r" || arg == "--rollback")
+                    do_rollback = true;
                 else
                     throw formatted_error("Unrecognized option {}.", arg);
 
@@ -3535,6 +3539,9 @@ Convert an NTFS filesystem to Btrfs.
 
         if (fn.empty())
             throw runtime_error("No device given.");
+
+        if (do_rollback)
+            rollback(fn);
 
 #ifndef WITH_ZLIB
         if (compression == btrfs_compression::zlib)

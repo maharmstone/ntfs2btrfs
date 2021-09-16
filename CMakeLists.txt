@@ -26,6 +26,7 @@ set(SRC_FILES src/ntfs2btrfs.cpp
     src/ntfs.cpp
     src/decomp.cpp
     src/compress.cpp
+    src/rollback.cpp
     src/crc32c.c
     src/xxhash.c
     src/sha256.c

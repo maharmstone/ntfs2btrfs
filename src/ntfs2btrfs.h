@@ -281,3 +281,6 @@ extern "C" void calc_sha256(uint8_t* hash, const void* input, size_t len);
 
 // blake2b-ref.c
 extern "C" void blake2b(void *out, size_t outlen, const void* in, size_t inlen);
+
+// rollback.cpp
+void rollback(const std::string& fn);
