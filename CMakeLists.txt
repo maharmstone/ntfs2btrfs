@@ -7,6 +7,8 @@ endif()
 
 project(ntfs2btrfs VERSION 20210523)
 
+include(GNUInstallDirs)
+
 option(WITH_ZLIB "Include zlib support" ON)
 option(WITH_LZO "Include lzo support" ON)
 option(WITH_ZSTD "Include zstd support" ON)
@@ -87,3 +89,4 @@ else()
 endif()
 
 install(TARGETS ntfs2btrfs DESTINATION sbin)
+install(FILES ntfs2btrfs.8 DESTINATION ${CMAKE_INSTALL_MANDIR})
