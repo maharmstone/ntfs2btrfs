@@ -76,4 +76,4 @@ else()
     target_compile_options(ntfs2btrfs PRIVATE -Wall -Wextra -Wno-address-of-packed-member -Wconversion -Wno-unknown-pragmas -Werror=pointer-arith)
 endif()
 
-install(TARGETS ntfs2btrfs DESTINATION bin)
+install(TARGETS ntfs2btrfs DESTINATION sbin)
