@@ -1,0 +1,17 @@
+.TH NTFS2BTRFS "8" "September 2021" "ntfs2btrfs 20210523" "System Administration"
+.SH NAME
+ntfs2btrfs \- convert ntfs filesystem to btrfs filesystem
+.SH SYNOPSIS
+.B ntfs2btrfs
+\fI\,device\/\fR
+.SH DESCRIPTION
+This is a tool which does in-place conversion of Microsoft's NTFS filesystem
+to the open-source filesystem Btrfs, much as btrfs-convert does for ext2.
+The original image is saved as a reflink copy at image/ntfs.img, and if you
+want to keep the conversion you can delete this to free up space.
+.SH SEE ALSO
+.BR btrfs (8),
+.BR mkfs.btrfs (8).
+.SH "INTERNET"
+.IP https://github.com/maharmstone/quibble
+.IP https://github.com/maharmstone/btrfs
