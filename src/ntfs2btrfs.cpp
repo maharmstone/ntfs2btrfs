@@ -1181,8 +1181,6 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
     INODE_ITEM ii;
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
 
-    static const char filename[] = "ntfs.img";
-
     // add INODE_ITEM
 
     memset(&ii, 0, sizeof(INODE_ITEM));
@@ -1212,7 +1210,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
     // add DIR_ITEM and DIR_INDEX
 
     {
-        size_t dilen = offsetof(DIR_ITEM, name[0]) + sizeof(filename) - 1;
+        size_t dilen = offsetof(DIR_ITEM, name[0]) + sizeof(image_filename) - 1;
         auto di = (DIR_ITEM*)malloc(dilen);
         if (!di)
             throw bad_alloc();
@@ -1225,11 +1223,11 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
             di->key.offset = 0;
             di->transid = 1;
             di->m = 0;
-            di->n = sizeof(filename) - 1;
+            di->n = sizeof(image_filename) - 1;
             di->type = BTRFS_TYPE_FILE;
-            memcpy(di->name, filename, sizeof(filename) - 1);
+            memcpy(di->name, image_filename, sizeof(image_filename) - 1);
 
-            hash = calc_crc32c(0xfffffffe, (const uint8_t*)filename, sizeof(filename) - 1);
+            hash = calc_crc32c(0xfffffffe, (const uint8_t*)image_filename, sizeof(image_filename) - 1);
 
             add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, di, (uint16_t)dilen);
             add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, di, (uint16_t)dilen);
@@ -1243,7 +1241,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
 
     // add INODE_REF
 
-    add_inode_ref(r, inode, SUBVOL_ROOT_INODE, 2, filename);
+    add_inode_ref(r, inode, SUBVOL_ROOT_INODE, 2, image_filename);
 
     // increase st_size in parent dir
 
@@ -1251,7 +1249,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
         if (it.first.obj_id == SUBVOL_ROOT_INODE && it.first.obj_type == TYPE_INODE_ITEM) {
             auto ii2 = (INODE_ITEM*)it.second.data;
 
-            ii2->st_size += (sizeof(filename) - 1) * 2;
+            ii2->st_size += (sizeof(image_filename) - 1) * 2;
             break;
         }
     }
@@ -3539,6 +3537,10 @@ Convert an NTFS filesystem to Btrfs.
         if (fn.empty())
             throw runtime_error("No device given.");
 
+#if defined(__i386__) || defined(__x86_64__)
+        check_cpu();
+#endif
+
         if (do_rollback)
             rollback(fn);
 
@@ -3592,10 +3594,6 @@ Convert an NTFS filesystem to Btrfs.
                 fmt::print("Using Blake2 for checksums.\n");
                 break;
         }
-
-#if defined(__i386__) || defined(__x86_64__)
-        check_cpu();
-#endif
 
         ntfs dev(fn);
 

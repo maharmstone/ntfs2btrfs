@@ -254,6 +254,7 @@ static inline uint64_t sector_align(uint64_t v, uint64_t s) {
 }
 
 static const uint64_t image_subvol_id = 0x100;
+static const char image_filename[] = "ntfs.img";
 
 // ntfs.cpp
 void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, std::list<mapping>& mappings,

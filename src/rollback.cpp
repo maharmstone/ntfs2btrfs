@@ -1,4 +1,5 @@
 #include "ntfs2btrfs.h"
+#include "crc32c.h"
 #include <iostream>
 #include <functional>
 
@@ -15,12 +16,12 @@ class btrfs {
 public:
     btrfs(const string& fn);
     uint64_t find_root_addr(uint64_t root);
+    bool walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func);
 
 private:
     superblock read_superblock();
     void read_chunks();
     vector<uint8_t> read(uint64_t addr, uint32_t len);
-    void walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func);
     pair<uint64_t, vector<uint8_t>> find_chunk(uint64_t addr);
 
     fstream f;
@@ -148,16 +149,26 @@ vector<uint8_t> btrfs::read(uint64_t addr, uint32_t len) {
     return ret;
 }
 
-void btrfs::walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func) {
+bool btrfs::walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func) {
     auto tree = read(addr, sb.node_size);
 
     // FIXME - check checksum
 
     auto& th = *(tree_header*)tree.data();
 
-    // FIXME - if root is not 0, recurse
-    if (th.level != 0)
-        throw runtime_error("FIXME - th.level != 0");
+    // if root is not 0, recurse
+    if (th.level != 0) {
+        auto nodes = (internal_node*)(&th + 1);
+
+        for (unsigned int i = 0; i < th.num_items; i++) {
+            auto ret = walk_tree(nodes[i].address, func);
+
+            if (!ret)
+                return false;
+        }
+
+        return true;
+    }
 
     auto nodes = (leaf_node*)(&th + 1);
 
@@ -171,8 +182,10 @@ void btrfs::walk_tree(uint64_t addr, const function<bool(const KEY&, const strin
             b = func(n.key, { (char*)&th + sizeof(tree_header) + n.offset, n.size });
 
         if (!b)
-            break;
+            return false;
     }
+
+    return true;
 }
 
 void btrfs::read_chunks() {
@@ -249,7 +262,37 @@ void rollback(const string& fn) {
 
     auto img_root_addr = b.find_root_addr(image_subvol_id);
 
-    // FIXME - find file called ntfs.img
+    // find file called ntfs.img
+
+    uint64_t inode = 0;
+    uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)image_filename, sizeof(image_filename) - 1);
+
+    b.walk_tree(img_root_addr, [&](const KEY& key, const string_view& data) {
+        if (key.obj_id > SUBVOL_ROOT_INODE || (key.obj_id == SUBVOL_ROOT_INODE && key.obj_type > TYPE_DIR_ITEM))
+            return false;
+
+        if (key.obj_id == SUBVOL_ROOT_INODE && key.obj_type == TYPE_DIR_ITEM && key.offset == hash) {
+            auto& di = *(DIR_ITEM*)data.data();
+
+            // FIXME - handle hash collisions
+
+            if (di.n == sizeof(image_filename) - 1 && !memcmp(di.name, image_filename, di.n)) {
+                if (di.key.obj_type != TYPE_INODE_ITEM)
+                    throw formatted_error("DIR_ITEM for {} pointed to object type {:x}, expected TYPE_INODE_ITEM.",
+                                          string_view(di.name, di.n), di.key.obj_type);
+
+                inode = di.key.obj_id;
+            }
+
+            return false;
+        }
+
+        return true;
+    });
+
+    if (inode == 0)
+        throw formatted_error("Could not find {} in subvol {:x}.", image_filename, image_subvol_id);
+
     // FIXME - parse extent items
     // FIXME - resolve logical addresses to physical
     // FIXME - remove identity maps
