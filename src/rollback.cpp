@@ -14,12 +14,13 @@ using chunks_t = map<uint64_t, vector<uint8_t>>;
 class btrfs {
 public:
     btrfs(const string& fn);
+    uint64_t find_root_addr(uint64_t root);
 
 private:
     superblock read_superblock();
     void read_chunks();
     vector<uint8_t> read(uint64_t addr, uint32_t len);
-    void walk_tree(uint64_t addr, const function<void(const KEY&, const string_view&)>& func);
+    void walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func);
     pair<uint64_t, vector<uint8_t>> find_chunk(uint64_t addr);
 
     fstream f;
@@ -147,7 +148,7 @@ vector<uint8_t> btrfs::read(uint64_t addr, uint32_t len) {
     return ret;
 }
 
-void btrfs::walk_tree(uint64_t addr, const function<void(const KEY&, const string_view&)>& func) {
+void btrfs::walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func) {
     auto tree = read(addr, sb.node_size);
 
     // FIXME - check checksum
@@ -162,11 +163,15 @@ void btrfs::walk_tree(uint64_t addr, const function<void(const KEY&, const strin
 
     for (unsigned int i = 0; i < th.num_items; i++) {
         const auto& n = nodes[i];
+        bool b;
 
         if (n.size == 0)
-            func(n.key, {});
+            b = func(n.key, {});
         else
-            func(n.key, { (char*)&th + n.offset, n.size });
+            b = func(n.key, { (char*)&th + sizeof(tree_header) + n.offset, n.size });
+
+        if (!b)
+            break;
     }
 }
 
@@ -209,18 +214,41 @@ void btrfs::read_chunks() {
 
     walk_tree(sb.chunk_tree_addr, [&](const KEY& key, const string_view& data) {
         if (key.obj_type != TYPE_CHUNK_ITEM)
-            return;
+            return true;
 
         chunks2.emplace(key.offset, vector<uint8_t>{data.data(), data.data() + data.size()});
+
+        return true;
     });
 
     chunks.swap(chunks2);
 }
 
+uint64_t btrfs::find_root_addr(uint64_t root) {
+    optional<uint64_t> ret;
+
+    walk_tree(sb.root_tree_addr, [&](const KEY& key, const string_view& data) {
+        if (key.obj_id != root || key.obj_type != TYPE_ROOT_ITEM)
+            return true;
+
+        const auto& ri = *(ROOT_ITEM*)data.data();
+
+        ret = ri.block_number;
+
+        return false;
+    });
+
+    if (!ret.has_value())
+        throw formatted_error("Could not find address for root {:x}.", root);
+
+    return ret.value();
+}
+
 void rollback(const string& fn) {
     btrfs b(fn);
 
-    // FIXME - find root of tree 100
+    auto img_root_addr = b.find_root_addr(image_subvol_id);
+
     // FIXME - find file called ntfs.img
     // FIXME - parse extent items
     // FIXME - resolve logical addresses to physical

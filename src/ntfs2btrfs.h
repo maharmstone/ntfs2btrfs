@@ -253,6 +253,8 @@ static inline uint64_t sector_align(uint64_t v, uint64_t s) {
     return ((v + s - 1) / s) * s;
 }
 
+static const uint64_t image_subvol_id = 0x100;
+
 // ntfs.cpp
 void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, std::list<mapping>& mappings,
                                uint32_t cluster_size, uint64_t vdl);

@@ -61,7 +61,6 @@ uint64_t mapped_inodes = 0, rewritten_inodes = 0, inline_inodes = 0;
 static const uint64_t stripe_length = 0x10000;
 static const uint64_t chunk_virt_offset = 0x100000;
 static const uint64_t dummy_inode = 0xffffffffffffffff; // protected data
-static const uint64_t image_subvol_id = 0x100;
 
 static const uint64_t first_ntfs_inode = 24;
 
