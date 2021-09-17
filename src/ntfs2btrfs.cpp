@@ -1849,28 +1849,19 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
 }
 
 static void set_xattr(root& r, uint64_t inode, const string_view& name, uint32_t hash, const string_view& data) {
-    auto di = (DIR_ITEM*)malloc(offsetof(DIR_ITEM, name[0]) + name.size() + data.size());
+    vector<uint8_t> buf(offsetof(DIR_ITEM, name[0]) + name.size() + data.size());
+    auto& di = *(DIR_ITEM*)buf.data();
 
-    if (!di)
-        throw bad_alloc();
+    di.key.obj_id = di.key.offset = 0;
+    di.key.obj_type = 0;
+    di.transid = 1;
+    di.m = (uint16_t)data.size();
+    di.n = (uint16_t)name.size();
+    di.type = BTRFS_TYPE_EA;
+    memcpy(di.name, name.data(), name.size());
+    memcpy(di.name + name.size(), data.data(), data.size());
 
-    try {
-        di->key.obj_id = di->key.offset = 0;
-        di->key.obj_type = 0;
-        di->transid = 1;
-        di->m = (uint16_t)data.size();
-        di->n = (uint16_t)name.size();
-        di->type = BTRFS_TYPE_EA;
-        memcpy(di->name, name.data(), name.size());
-        memcpy(di->name + name.size(), data.data(), data.size());
-
-        add_item(r, inode, TYPE_XATTR_ITEM, hash, di, (uint16_t)(offsetof(DIR_ITEM, name[0]) + name.size() + data.size()));
-    } catch (...) {
-        free(di);
-        throw;
-    }
-
-    free(di);
+    add_item(r, inode, TYPE_XATTR_ITEM, hash, &di, (uint16_t)buf.size());
 }
 
 static void clear_line() {
