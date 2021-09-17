@@ -1493,46 +1493,36 @@ static void link_inode(root& r, uint64_t inode, uint64_t dir, const string_view&
     seq = r.dir_seqs.at(dir);
 
     {
-        size_t dilen = offsetof(DIR_ITEM, name[0]) + name.length();
-        auto di = (DIR_ITEM*)malloc(dilen);
-        if (!di)
-            throw bad_alloc();
+        buffer_t buf(offsetof(DIR_ITEM, name[0]) + name.length());
 
-        try {
-            uint32_t hash;
+        auto& di = *(DIR_ITEM*)buf.data();
 
-            di->key.obj_id = inode;
-            di->key.obj_type = TYPE_INODE_ITEM;
-            di->key.offset = 0;
-            di->transid = 1;
-            di->m = 0;
-            di->n = (uint16_t)name.length();
-            di->type = type;
-            memcpy(di->name, name.data(), name.length());
+        di.key.obj_id = inode;
+        di.key.obj_type = TYPE_INODE_ITEM;
+        di.key.offset = 0;
+        di.transid = 1;
+        di.m = 0;
+        di.n = (uint16_t)name.length();
+        di.type = type;
+        memcpy(di.name, name.data(), name.length());
 
-            hash = calc_crc32c(0xfffffffe, (const uint8_t*)name.data(), (uint32_t)name.length());
+        auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)name.data(), (uint32_t)name.length());
 
-            if (r.items.count(KEY{dir, TYPE_DIR_ITEM, hash}) == 0)
-                add_item(r, dir, TYPE_DIR_ITEM, hash, di, (uint16_t)dilen);
-            else { // hash collision
-                auto& ent = r.items.at(KEY{dir, TYPE_DIR_ITEM, hash});
+        if (r.items.count(KEY{dir, TYPE_DIR_ITEM, hash}) == 0)
+            add_item(r, dir, TYPE_DIR_ITEM, hash, buf);
+        else { // hash collision
+            auto& ent = r.items.at(KEY{dir, TYPE_DIR_ITEM, hash});
 
-                if (!ent.empty()) {
-                    ent.resize(ent.size() + dilen);
-                    memcpy(ent.data() + ent.size() - dilen, di, dilen);
-                } else {
-                    ent.resize(dilen);
-                    memcpy(ent.data(), di, dilen);
-                }
+            if (!ent.empty()) {
+                ent.resize(ent.size() + buf.size());
+                memcpy(ent.data() + ent.size() - buf.size(), &di, buf.size());
+            } else {
+                ent.resize(buf.size());
+                memcpy(ent.data(), &di, buf.size());
             }
-
-            add_item(r, dir, TYPE_DIR_INDEX, seq, di, (uint16_t)dilen);
-        } catch (...) {
-            free(di);
-            throw;
         }
 
-        free(di);
+        add_item(r, dir, TYPE_DIR_INDEX, seq, buf);
     }
 
     // add INODE_REF
