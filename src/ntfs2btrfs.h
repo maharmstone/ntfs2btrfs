@@ -88,16 +88,7 @@ struct data_alloc {
     bool not_in_img;
 };
 
-struct tree_item {
-    tree_item() = default;
-
-    tree_item(const void* data, uint32_t len) : data(len) {
-        if (len > 0)
-            memcpy(this->data.data(), data, len);
-    }
-
-    std::vector<uint8_t> data;
-};
+using buffer_t = std::vector<uint8_t>;
 
 static bool inline operator<(const KEY& a, const KEY& b) {
     if (a.obj_id < b.obj_id)
@@ -124,7 +115,7 @@ public:
     void write_trees(ntfs& dev);
 
     uint64_t id;
-    std::map<KEY, tree_item> items;
+    std::map<KEY, buffer_t> items;
     std::vector<std::string> trees;
     uint64_t tree_addr;
     uint8_t level;

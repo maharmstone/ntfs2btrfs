@@ -269,14 +269,14 @@ static void create_data_chunks(ntfs& dev, const string& bmpdata) {
 }
 
 static void add_item(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset, const void* data, uint16_t len) {
-    auto ret = r.items.emplace(KEY{obj_id, obj_type, offset}, tree_item{});
+    auto ret = r.items.emplace(KEY{obj_id, obj_type, offset}, buffer_t(len));
 
     if (!ret.second)
         throw formatted_error("Could not insert entry ({:x}, {:x}, {:x}) into root items list.", obj_id, obj_type, offset);
 
     auto& it = ret.first->second;
 
-    new (&it) tree_item(data, len);
+    memcpy(it.data(), data, len);
 }
 
 static void add_chunk(root& chunk_root, root& devtree_root, root& extent_root, const chunk& c) {
@@ -520,7 +520,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
         uint32_t data_off = tree_size - (uint32_t)sizeof(tree_header);
 
         for (const auto& i : items) {
-            if (sizeof(leaf_node) + i.second.data.size() > space_left) { // tree complete, add to list
+            if (sizeof(leaf_node) + i.second.size() > space_left) { // tree complete, add to list
                 if (!old_addresses.empty()) {
                     th->address = old_addresses.front();
                     old_addresses.pop_front();
@@ -550,15 +550,15 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
                 ln = (leaf_node*)((uint8_t*)buf.data() + sizeof(tree_header));
             }
 
-            if (sizeof(leaf_node) + i.second.data.size() + sizeof(tree_header) > tree_size)
+            if (sizeof(leaf_node) + i.second.size() + sizeof(tree_header) > tree_size)
                 throw formatted_error("Item too large for tree.");
 
             ln->key = i.first;
-            ln->size = (uint32_t)i.second.data.size();
+            ln->size = (uint32_t)i.second.size();
 
-            if (!i.second.data.empty()) {
-                data_off -= (uint32_t)i.second.data.size();
-                memcpy((uint8_t*)buf.data() + sizeof(tree_header) + data_off, i.second.data.data(), i.second.data.size());
+            if (!i.second.empty()) {
+                data_off -= (uint32_t)i.second.size();
+                memcpy((uint8_t*)buf.data() + sizeof(tree_header) + data_off, i.second.data(), i.second.size());
             }
 
             ln->offset = data_off;
@@ -566,7 +566,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
             ln++;
 
             num_items++;
-            space_left -= (uint32_t)(sizeof(leaf_node) + i.second.data.size());
+            space_left -= (uint32_t)(sizeof(leaf_node) + i.second.size());
         }
     }
 
@@ -776,11 +776,11 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
     sys_chunk_size = 0;
     for (const auto& c : chunk_root.items) {
         if (c.first.obj_type == TYPE_CHUNK_ITEM) {
-            auto& ci = *(CHUNK_ITEM*)c.second.data.data();
+            auto& ci = *(CHUNK_ITEM*)c.second.data();
 
             if (ci.type & BLOCK_FLAG_SYSTEM) {
                 sys_chunk_size += sizeof(KEY);
-                sys_chunk_size += (uint32_t)c.second.data.size();
+                sys_chunk_size += (uint32_t)c.second.size();
             }
         }
     }
@@ -824,7 +824,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
 
     for (const auto& c : chunk_root.items) {
         if (c.first.obj_type == TYPE_DEV_ITEM) {
-            memcpy(&sb.dev_item, c.second.data.data(), sizeof(DEV_ITEM));
+            memcpy(&sb.dev_item, c.second.data(), sizeof(DEV_ITEM));
             break;
         }
     }
@@ -836,7 +836,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
 
         for (const auto& c : chunk_root.items) {
             if (c.first.obj_type == TYPE_CHUNK_ITEM) {
-                auto& ci = *(CHUNK_ITEM*)c.second.data.data();
+                auto& ci = *(CHUNK_ITEM*)c.second.data();
 
                 if (ci.type & BLOCK_FLAG_SYSTEM) {
                     auto& key = *(KEY*)ptr;
@@ -845,9 +845,9 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
 
                     ptr += sizeof(KEY);
 
-                    memcpy(ptr, c.second.data.data(), c.second.data.size());
+                    memcpy(ptr, c.second.data(), c.second.size());
 
-                    ptr += c.second.data.size();
+                    ptr += c.second.size();
                 }
             }
         }
@@ -1016,9 +1016,9 @@ static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t ind
 
         // FIXME - check if too long for tree, and create INODE_EXTREF instead
 
-        old.data.resize(old.data.size() + irlen);
+        old.resize(old.size() + irlen);
 
-        auto& ir = *(INODE_REF*)((uint8_t*)old.data.data() + old.data.size() - irlen);
+        auto& ir = *(INODE_REF*)((uint8_t*)old.data() + old.size() - irlen);
 
         ir.index = index;
         ir.n = (uint16_t)name.length();
@@ -1194,7 +1194,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
 
     for (auto& it : r.items) {
         if (it.first.obj_id == SUBVOL_ROOT_INODE && it.first.obj_type == TYPE_INODE_ITEM) {
-            auto& ii2 = *(INODE_ITEM*)it.second.data.data();
+            auto& ii2 = *(INODE_ITEM*)it.second.data();
 
             ii2.st_size += (sizeof(image_filename) - 1) * 2;
             break;
@@ -1510,12 +1510,12 @@ static void link_inode(root& r, uint64_t inode, uint64_t dir, const string_view&
             else { // hash collision
                 auto& ent = r.items.at(KEY{dir, TYPE_DIR_ITEM, hash});
 
-                if (!ent.data.empty()) {
-                    ent.data.resize(ent.data.size() + dilen);
-                    memcpy(ent.data.data() + ent.data.size() - dilen, di, dilen);
+                if (!ent.empty()) {
+                    ent.resize(ent.size() + dilen);
+                    memcpy(ent.data() + ent.size() - dilen, di, dilen);
                 } else {
-                    ent.data.resize(dilen);
-                    memcpy(ent.data.data(), di, dilen);
+                    ent.resize(dilen);
+                    memcpy(ent.data(), di, dilen);
                 }
             }
 
@@ -3123,7 +3123,7 @@ static void add_subvol_uuid(root& r) {
 static void update_dir_sizes(root& r) {
     for (auto& it : r.items) {
         if (it.first.obj_type == TYPE_INODE_ITEM && r.dir_size.count(it.first.obj_id) != 0) {
-            auto& ii = *(INODE_ITEM*)it.second.data.data();
+            auto& ii = *(INODE_ITEM*)it.second.data();
 
             // FIXME - would it speed things up if we removed the entry from dir_size map here?
 
