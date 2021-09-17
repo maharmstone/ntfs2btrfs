@@ -1020,18 +1020,13 @@ static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t ind
         if (!buf)
             throw bad_alloc();
 
-        try {
-            memcpy(buf, old.data, old.len);
+        memcpy(buf, old.data, old.len);
 
-            auto ir = (INODE_REF*)((uint8_t*)buf + old.len);
+        auto& ir = *(INODE_REF*)((uint8_t*)buf + old.len);
 
-            ir->index = index;
-            ir->n = (uint16_t)name.length();
-            memcpy(ir->name, name.data(), name.length());
-        } catch (...) {
-            free(buf);
-            throw;
-        }
+        ir.index = index;
+        ir.n = (uint16_t)name.length();
+        memcpy(ir.name, name.data(), name.length());
 
         old.data = buf;
         old.len = (uint16_t)irlen;
@@ -1039,24 +1034,14 @@ static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t ind
         return;
     }
 
-    size_t irlen = offsetof(INODE_REF, name[0]) + name.length();
+    vector<uint8_t> buf(offsetof(INODE_REF, name[0]) + name.length());
+    auto& ir = *(INODE_REF*)buf.data();
 
-    auto ir = (INODE_REF*)malloc(irlen);
-    if (!ir)
-        throw bad_alloc();
+    ir.index = index;
+    ir.n = (uint16_t)name.length();
+    memcpy(ir.name, name.data(), name.length());
 
-    try {
-        ir->index = index;
-        ir->n = (uint16_t)name.length();
-        memcpy(ir->name, name.data(), name.length());
-
-        add_item(r, inode, TYPE_INODE_REF, parent, ir, (uint16_t)irlen);
-    } catch (...) {
-        free(ir);
-        throw;
-    }
-
-    free(ir);
+    add_item(r, inode, TYPE_INODE_REF, parent, &ir, (uint16_t)buf.size());
 }
 
 static void populate_fstree(root& r) {
