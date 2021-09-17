@@ -3172,30 +3172,20 @@ static void populate_root_root(root& root_root) {
 
     add_inode_ref(root_root, BTRFS_ROOT_TREEDIR, BTRFS_ROOT_TREEDIR, 0, "..");
 
-    {
-        size_t dilen = offsetof(DIR_ITEM, name[0]) + sizeof(default_subvol) - 1;
-        auto di = (DIR_ITEM*)malloc(dilen);
-        if (!di)
-            throw bad_alloc();
+    vector<uint8_t> buf(offsetof(DIR_ITEM, name[0]) + sizeof(default_subvol) - 1);
 
-        try {
-            di->key.obj_id = BTRFS_ROOT_FSTREE;
-            di->key.obj_type = TYPE_ROOT_ITEM;
-            di->key.offset = 0xffffffffffffffff;
-            di->transid = 0;
-            di->m = 0;
-            di->n = sizeof(default_subvol) - 1;
-            di->type = BTRFS_TYPE_DIRECTORY;
-            memcpy(di->name, default_subvol, sizeof(default_subvol) - 1);
+    auto& di = *(DIR_ITEM*)buf.data();
 
-            add_item(root_root, BTRFS_ROOT_TREEDIR, TYPE_DIR_ITEM, default_hash, di, (uint16_t)dilen);
-        } catch (...) {
-            free(di);
-            throw;
-        }
+    di.key.obj_id = BTRFS_ROOT_FSTREE;
+    di.key.obj_type = TYPE_ROOT_ITEM;
+    di.key.offset = 0xffffffffffffffff;
+    di.transid = 0;
+    di.m = 0;
+    di.n = sizeof(default_subvol) - 1;
+    di.type = BTRFS_TYPE_DIRECTORY;
+    memcpy(di.name, default_subvol, sizeof(default_subvol) - 1);
 
-        free(di);
-    }
+    add_item(root_root, BTRFS_ROOT_TREEDIR, TYPE_DIR_ITEM, default_hash, &di, (uint16_t)buf.size());
 }
 
 static void add_subvol_uuid(root& r) {
