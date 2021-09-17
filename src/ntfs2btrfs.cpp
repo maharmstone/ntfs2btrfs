@@ -275,6 +275,17 @@ static void add_item(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset
         throw formatted_error("Could not insert entry ({:x}, {:x}, {:x}) into root items list.", obj_id, obj_type, offset);
 }
 
+static void add_item_move(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset, buffer_t& buf) {
+    auto ret = r.items.emplace(KEY{obj_id, obj_type, offset}, buffer_t{});
+
+    if (!ret.second)
+        throw formatted_error("Could not insert entry ({:x}, {:x}, {:x}) into root items list.", obj_id, obj_type, offset);
+
+    auto& it = ret.first->second;
+
+    it.swap(buf);
+}
+
 static void add_item(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset, const void* data, uint16_t len) {
     auto ret = r.items.emplace(KEY{obj_id, obj_type, offset}, buffer_t(len));
 
@@ -1041,7 +1052,7 @@ static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t ind
     ir.n = (uint16_t)name.length();
     memcpy(ir.name, name.data(), name.length());
 
-    add_item(r, inode, TYPE_INODE_REF, parent, buf);
+    add_item_move(r, inode, TYPE_INODE_REF, parent, buf);
 }
 
 static void populate_fstree(root& r) {
@@ -1107,7 +1118,7 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
         memcpy(rr.name, subvol_name, sizeof(subvol_name) - 1);
 
         add_item(root_root, BTRFS_ROOT_FSTREE, TYPE_ROOT_REF, image_subvol_id, buf);
-        add_item(root_root, image_subvol_id, TYPE_ROOT_BACKREF, BTRFS_ROOT_FSTREE, buf);
+        add_item_move(root_root, image_subvol_id, TYPE_ROOT_BACKREF, BTRFS_ROOT_FSTREE, buf);
     }
 
     // add DIR_ITEM and DIR_INDEX
@@ -1128,7 +1139,7 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
         auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)subvol_name, sizeof(subvol_name) - 1);
 
         add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, buf);
-        add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, buf);
+        add_item_move(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, buf);
     }
 
     // increase st_size in parent dir
@@ -1190,7 +1201,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
         auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)image_filename, sizeof(image_filename) - 1);
 
         add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, buf);
-        add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, buf);
+        add_item_move(r, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, buf);
     }
 
     // add INODE_REF
@@ -1522,7 +1533,7 @@ static void link_inode(root& r, uint64_t inode, uint64_t dir, const string_view&
             }
         }
 
-        add_item(r, dir, TYPE_DIR_INDEX, seq, buf);
+        add_item_move(r, dir, TYPE_DIR_INDEX, seq, buf);
     }
 
     // add INODE_REF
@@ -1794,7 +1805,7 @@ static void set_xattr(root& r, uint64_t inode, const string_view& name, uint32_t
     memcpy(di.name, name.data(), name.size());
     memcpy(di.name + name.size(), data.data(), data.size());
 
-    add_item(r, inode, TYPE_XATTR_ITEM, hash, buf);
+    add_item_move(r, inode, TYPE_XATTR_ITEM, hash, buf);
 }
 
 static void clear_line() {
@@ -2612,7 +2623,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             if (vdl < inline_data.length())
                 memset(ed.data + vdl, 0, (size_t)(inline_data.length() - vdl));
 
-            add_item(r, inode, TYPE_EXTENT_DATA, 0, buf);
+            add_item_move(r, inode, TYPE_EXTENT_DATA, 0, buf);
 
             ii.st_blocks = inline_data.length();
         }
@@ -3085,7 +3096,6 @@ static void populate_root_root(root& root_root) {
     add_inode_ref(root_root, BTRFS_ROOT_TREEDIR, BTRFS_ROOT_TREEDIR, 0, "..");
 
     buffer_t buf(offsetof(DIR_ITEM, name[0]) + sizeof(default_subvol) - 1);
-
     auto& di = *(DIR_ITEM*)buf.data();
 
     di.key.obj_id = BTRFS_ROOT_FSTREE;
@@ -3097,7 +3107,7 @@ static void populate_root_root(root& root_root) {
     di.type = BTRFS_TYPE_DIRECTORY;
     memcpy(di.name, default_subvol, sizeof(default_subvol) - 1);
 
-    add_item(root_root, BTRFS_ROOT_TREEDIR, TYPE_DIR_ITEM, default_hash, buf);
+    add_item_move(root_root, BTRFS_ROOT_TREEDIR, TYPE_DIR_ITEM, default_hash, buf);
 }
 
 static void add_subvol_uuid(root& r) {
