@@ -1195,33 +1195,22 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
     // add DIR_ITEM and DIR_INDEX
 
     {
-        size_t dilen = offsetof(DIR_ITEM, name[0]) + sizeof(image_filename) - 1;
-        auto di = (DIR_ITEM*)malloc(dilen);
-        if (!di)
-            throw bad_alloc();
+        vector<uint8_t> buf(offsetof(DIR_ITEM, name[0]) + sizeof(image_filename) - 1);
+        auto& di = *(DIR_ITEM*)buf.data();
 
-        try {
-            uint32_t hash;
+        di.key.obj_id = inode;
+        di.key.obj_type = TYPE_INODE_ITEM;
+        di.key.offset = 0;
+        di.transid = 1;
+        di.m = 0;
+        di.n = sizeof(image_filename) - 1;
+        di.type = BTRFS_TYPE_FILE;
+        memcpy(di.name, image_filename, sizeof(image_filename) - 1);
 
-            di->key.obj_id = inode;
-            di->key.obj_type = TYPE_INODE_ITEM;
-            di->key.offset = 0;
-            di->transid = 1;
-            di->m = 0;
-            di->n = sizeof(image_filename) - 1;
-            di->type = BTRFS_TYPE_FILE;
-            memcpy(di->name, image_filename, sizeof(image_filename) - 1);
+        auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)image_filename, sizeof(image_filename) - 1);
 
-            hash = calc_crc32c(0xfffffffe, (const uint8_t*)image_filename, sizeof(image_filename) - 1);
-
-            add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, di, (uint16_t)dilen);
-            add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, di, (uint16_t)dilen);
-        } catch (...) {
-            free(di);
-            throw;
-        }
-
-        free(di);
+        add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, &di, (uint16_t)buf.size());
+        add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, &di, (uint16_t)buf.size());
     }
 
     // add INODE_REF
@@ -1241,55 +1230,43 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
 
     // add extents
 
-    {
-        size_t extlen = offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2);
-        auto ed = (EXTENT_DATA*)malloc(extlen);
-        if (!ed)
-            throw bad_alloc();
+    vector<uint8_t> buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
+    auto& ed = *(EXTENT_DATA*)buf.data();
+    auto& ed2 = *(EXTENT_DATA2*)&ed.data;
 
-        auto ed2 = (EXTENT_DATA2*)&ed->data;
+    ed.generation = 1;
+    ed.compression = btrfs_compression::none;
+    ed.encryption = 0;
+    ed.encoding = 0;
+    ed.type = btrfs_extent_type::regular;
 
-        ed->generation = 1;
-        ed->compression = btrfs_compression::none;
-        ed->encryption = 0;
-        ed->encoding = 0;
-        ed->type = btrfs_extent_type::regular;
+    for (const auto& rs : runs) {
+        for (const auto& run : rs.second) {
+            uint64_t addr;
 
-        try {
-            for (const auto& rs : runs) {
-                for (const auto& run : rs.second) {
-                    uint64_t addr;
+            if (run.relocated || run.not_in_img)
+                continue;
 
-                    if (run.relocated || run.not_in_img)
-                        continue;
+            ed.decoded_size = ed2.size = ed2.num_bytes = run.length * cluster_size;
 
-                    ed->decoded_size = ed2->size = ed2->num_bytes = run.length * cluster_size;
+            addr = run.offset * cluster_size;
 
-                    addr = run.offset * cluster_size;
-
-                    if (run.inode == dummy_inode) {
-                        for (const auto& reloc : relocs) {
-                            if (reloc.old_start == run.offset) {
-                                ed2->address = (reloc.new_start * cluster_size) + chunk_virt_offset;
-                                break;
-                            }
-                        }
-                    } else
-                        ed2->address = addr + chunk_virt_offset;
-
-                    ed2->offset = 0;
-
-                    add_item(r, inode, TYPE_EXTENT_DATA, addr, ed, (uint16_t)extlen);
-
-                    data_size += ed2->size;
+            if (run.inode == dummy_inode) {
+                for (const auto& reloc : relocs) {
+                    if (reloc.old_start == run.offset) {
+                        ed2.address = (reloc.new_start * cluster_size) + chunk_virt_offset;
+                        break;
+                    }
                 }
-            }
-        } catch (...) {
-            free(ed);
-            throw;
-        }
+            } else
+                ed2.address = addr + chunk_virt_offset;
 
-        free(ed);
+            ed2.offset = 0;
+
+            add_item(r, inode, TYPE_EXTENT_DATA, addr, &ed, (uint16_t)buf.size());
+
+            data_size += ed2.size;
+        }
     }
 }
 
