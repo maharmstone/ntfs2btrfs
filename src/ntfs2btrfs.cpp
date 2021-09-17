@@ -2387,88 +2387,79 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     // FIXME - LXSS
 
     if (!mappings.empty()) {
-        size_t extlen = offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2);
-        auto ed = (EXTENT_DATA*)malloc(extlen);
-        if (!ed)
-            throw bad_alloc();
+        buffer_t buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
+        auto& ed = *(EXTENT_DATA*)buf.data();
 
         mapped_inodes++;
 
-        auto ed2 = (EXTENT_DATA2*)&ed->data;
+        auto& ed2 = *(EXTENT_DATA2*)&ed.data;
 
-        ed->generation = 1;
-        ed->compression = btrfs_compression::none;
-        ed->encryption = 0;
-        ed->encoding = 0;
-        ed->type = btrfs_extent_type::regular;
+        ed.generation = 1;
+        ed.compression = btrfs_compression::none;
+        ed.encryption = 0;
+        ed.encoding = 0;
+        ed.type = btrfs_extent_type::regular;
 
-        try {
-            process_mappings(dev, inode, mappings, runs);
+        process_mappings(dev, inode, mappings, runs);
 
-            if (vdl < file_size) {
-                uint64_t alloc_size = sector_align(file_size, sector_size);
-                uint64_t alloc_vdl = sector_align(vdl, sector_size);
+        if (vdl < file_size) {
+            uint64_t alloc_size = sector_align(file_size, sector_size);
+            uint64_t alloc_vdl = sector_align(vdl, sector_size);
 
-                if (!mappings.empty() && (mappings.back().vcn + mappings.back().length) < alloc_size / sector_size) {
-                    mappings.emplace_back(0, mappings.back().vcn + mappings.back().length,
-                                          (alloc_size / sector_size) - mappings.back().vcn - mappings.back().length);
-                }
+            if (!mappings.empty() && (mappings.back().vcn + mappings.back().length) < alloc_size / sector_size) {
+                mappings.emplace_back(0, mappings.back().vcn + mappings.back().length,
+                                        (alloc_size / sector_size) - mappings.back().vcn - mappings.back().length);
+            }
 
-                while (alloc_vdl < alloc_size) { // for whole sectors, replace with sparse extents
-                    if (!mappings.empty()) {
-                        auto& m = mappings.back();
+            while (alloc_vdl < alloc_size) { // for whole sectors, replace with sparse extents
+                if (!mappings.empty()) {
+                    auto& m = mappings.back();
 
-                        if (m.length * sector_size > alloc_size - alloc_vdl) {
-                            uint64_t sub = (alloc_size - alloc_vdl) / sector_size;
+                    if (m.length * sector_size > alloc_size - alloc_vdl) {
+                        uint64_t sub = (alloc_size - alloc_vdl) / sector_size;
 
-                            if (sub > 0) {
-                                m.length -= sub * sector_size;
-                                alloc_size -= sub * sector_size;
-                            }
-
-                            break;
-                        } else {
-                            alloc_size -= m.length * sector_size;
-                            mappings.pop_back();
+                        if (sub > 0) {
+                            m.length -= sub * sector_size;
+                            alloc_size -= sub * sector_size;
                         }
-                    } else {
-                        alloc_size = alloc_vdl;
+
                         break;
+                    } else {
+                        alloc_size -= m.length * sector_size;
+                        mappings.pop_back();
                     }
-                }
-
-                if (vdl < alloc_size) { // zero end of final sector if necessary
-                    string sector;
-
-                    sector.resize(sector_size);
-
-                    dev.seek((mappings.back().lcn + mappings.back().length - 1) * cluster_size);
-                    dev.read(sector.data(), sector.length());
-
-                    memset(sector.data() + (vdl % sector_size), 0, sector_size - (vdl % sector_size));
-
-                    dev.seek((mappings.back().lcn + mappings.back().length - 1) * cluster_size);
-                    dev.write(sector.data(), sector.length());
+                } else {
+                    alloc_size = alloc_vdl;
+                    break;
                 }
             }
 
-            for (const auto& m : mappings) {
-                if (m.lcn != 0) { // not sparse
-                    ed->decoded_size = ed2->size = ed2->num_bytes = m.length * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-                    ii.st_blocks += ed->decoded_size;
+            if (vdl < alloc_size) { // zero end of final sector if necessary
+                string sector;
 
-                    ed2->address = (m.lcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster) + chunk_virt_offset;
-                    ed2->offset = 0;
+                sector.resize(sector_size);
 
-                    add_item(r, inode, TYPE_EXTENT_DATA, m.vcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster, ed, (uint16_t)extlen);
-                }
+                dev.seek((mappings.back().lcn + mappings.back().length - 1) * cluster_size);
+                dev.read(sector.data(), sector.length());
+
+                memset(sector.data() + (vdl % sector_size), 0, sector_size - (vdl % sector_size));
+
+                dev.seek((mappings.back().lcn + mappings.back().length - 1) * cluster_size);
+                dev.write(sector.data(), sector.length());
             }
-        } catch (...) {
-            free(ed);
-            throw;
         }
 
-        free(ed);
+        for (const auto& m : mappings) {
+            if (m.lcn != 0) { // not sparse
+                ed.decoded_size = ed2.size = ed2.num_bytes = m.length * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+                ii.st_blocks += ed.decoded_size;
+
+                ed2.address = (m.lcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster) + chunk_virt_offset;
+                ed2.offset = 0;
+
+                add_item(r, inode, TYPE_EXTENT_DATA, m.vcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster, buf);
+            }
+        }
     } else if (!inline_data.empty()) {
         if (inline_data.length() > max_inline) {
             buffer_t buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
@@ -2601,30 +2592,27 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             inline_data.clear();
         } else {
-            size_t extlen = offsetof(EXTENT_DATA, data[0]) + inline_data.length();
-            auto ed = (EXTENT_DATA*)malloc(extlen);
-            if (!ed)
-                throw bad_alloc();
+            buffer_t buf(offsetof(EXTENT_DATA, data[0]) + inline_data.length());
+
+            auto& ed = *(EXTENT_DATA*)buf.data();
 
             inline_inodes++;
 
             // FIXME - compress inline extents?
 
-            ed->generation = 1;
-            ed->decoded_size = inline_data.length();
-            ed->compression = btrfs_compression::none;
-            ed->encryption = 0;
-            ed->encoding = 0;
-            ed->type = btrfs_extent_type::inline_extent;
+            ed.generation = 1;
+            ed.decoded_size = inline_data.length();
+            ed.compression = btrfs_compression::none;
+            ed.encryption = 0;
+            ed.encoding = 0;
+            ed.type = btrfs_extent_type::inline_extent;
 
-            memcpy(ed->data, inline_data.data(), inline_data.length());
+            memcpy(ed.data, inline_data.data(), inline_data.length());
 
             if (vdl < inline_data.length())
-                memset(ed->data + vdl, 0, (size_t)(inline_data.length() - vdl));
+                memset(ed.data + vdl, 0, (size_t)(inline_data.length() - vdl));
 
-            add_item(r, inode, TYPE_EXTENT_DATA, 0, ed, (uint16_t)extlen);
-
-            free(ed);
+            add_item(r, inode, TYPE_EXTENT_DATA, 0, buf);
 
             ii.st_blocks = inline_data.length();
         }
