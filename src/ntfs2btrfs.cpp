@@ -1098,57 +1098,37 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
     // add ROOT_REF and ROOT_BACKREF
 
     {
-        size_t rrlen = offsetof(ROOT_REF, name[0]) + sizeof(subvol_name) - 1;
-        auto rr = (ROOT_REF*)malloc(rrlen);
-        if (!rr)
-            throw bad_alloc();
+        vector<uint8_t> buf(offsetof(ROOT_REF, name[0]) + sizeof(subvol_name) - 1);
+        auto& rr = *(ROOT_REF*)buf.data();
 
-        try {
-            rr->dir = SUBVOL_ROOT_INODE;
-            rr->index = 2;
-            rr->n = sizeof(subvol_name) - 1;
-            memcpy(rr->name, subvol_name, sizeof(subvol_name) - 1);
+        rr.dir = SUBVOL_ROOT_INODE;
+        rr.index = 2;
+        rr.n = sizeof(subvol_name) - 1;
+        memcpy(rr.name, subvol_name, sizeof(subvol_name) - 1);
 
-            add_item(root_root, BTRFS_ROOT_FSTREE, TYPE_ROOT_REF, image_subvol_id, rr, (uint16_t)rrlen);
-            add_item(root_root, image_subvol_id, TYPE_ROOT_BACKREF, BTRFS_ROOT_FSTREE, rr, (uint16_t)rrlen);
-        } catch (...) {
-            free(rr);
-            throw;
-        }
-
-        free(rr);
+        add_item(root_root, BTRFS_ROOT_FSTREE, TYPE_ROOT_REF, image_subvol_id, &rr, (uint16_t)buf.size());
+        add_item(root_root, image_subvol_id, TYPE_ROOT_BACKREF, BTRFS_ROOT_FSTREE, &rr, (uint16_t)buf.size());
     }
 
     // add DIR_ITEM and DIR_INDEX
 
     {
-        size_t dilen = offsetof(DIR_ITEM, name[0]) + sizeof(subvol_name) - 1;
-        auto di = (DIR_ITEM*)malloc(dilen);
-        if (!di)
-            throw bad_alloc();
+        vector<uint8_t> buf(offsetof(DIR_ITEM, name[0]) + sizeof(subvol_name) - 1);
+        auto& di = *(DIR_ITEM*)buf.data();
 
-        try {
-            uint32_t hash;
+        di.key.obj_id = image_subvol_id;
+        di.key.obj_type = TYPE_ROOT_ITEM;
+        di.key.offset = 0xffffffffffffffff;
+        di.transid = 1;
+        di.m = 0;
+        di.n = sizeof(subvol_name) - 1;
+        di.type = BTRFS_TYPE_DIRECTORY;
+        memcpy(di.name, subvol_name, sizeof(subvol_name) - 1);
 
-            di->key.obj_id = image_subvol_id;
-            di->key.obj_type = TYPE_ROOT_ITEM;
-            di->key.offset = 0xffffffffffffffff;
-            di->transid = 1;
-            di->m = 0;
-            di->n = sizeof(subvol_name) - 1;
-            di->type = BTRFS_TYPE_DIRECTORY;
-            memcpy(di->name, subvol_name, sizeof(subvol_name) - 1);
+        auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)subvol_name, sizeof(subvol_name) - 1);
 
-            hash = calc_crc32c(0xfffffffe, (const uint8_t*)subvol_name, sizeof(subvol_name) - 1);
-
-            add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, di, (uint16_t)dilen);
-            add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, di, (uint16_t)dilen);
-        } catch (...) {
-            free(di);
-            throw;
-        }
-
-        free(di);
+        add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, &di, (uint16_t)buf.size());
+        add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, &di, (uint16_t)buf.size());
     }
 
     // increase st_size in parent dir
