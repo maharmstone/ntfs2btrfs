@@ -1027,7 +1027,7 @@ static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t ind
         return;
     }
 
-    vector<uint8_t> buf(offsetof(INODE_REF, name[0]) + name.length());
+    buffer_t buf(offsetof(INODE_REF, name[0]) + name.length());
     auto& ir = *(INODE_REF*)buf.data();
 
     ir.index = index;
@@ -1091,7 +1091,7 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
     // add ROOT_REF and ROOT_BACKREF
 
     {
-        vector<uint8_t> buf(offsetof(ROOT_REF, name[0]) + sizeof(subvol_name) - 1);
+        buffer_t buf(offsetof(ROOT_REF, name[0]) + sizeof(subvol_name) - 1);
         auto& rr = *(ROOT_REF*)buf.data();
 
         rr.dir = SUBVOL_ROOT_INODE;
@@ -1106,7 +1106,7 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
     // add DIR_ITEM and DIR_INDEX
 
     {
-        vector<uint8_t> buf(offsetof(DIR_ITEM, name[0]) + sizeof(subvol_name) - 1);
+        buffer_t buf(offsetof(DIR_ITEM, name[0]) + sizeof(subvol_name) - 1);
         auto& di = *(DIR_ITEM*)buf.data();
 
         di.key.obj_id = image_subvol_id;
@@ -1168,7 +1168,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
     // add DIR_ITEM and DIR_INDEX
 
     {
-        vector<uint8_t> buf(offsetof(DIR_ITEM, name[0]) + sizeof(image_filename) - 1);
+        buffer_t buf(offsetof(DIR_ITEM, name[0]) + sizeof(image_filename) - 1);
         auto& di = *(DIR_ITEM*)buf.data();
 
         di.key.obj_id = inode;
@@ -1203,7 +1203,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
 
     // add extents
 
-    vector<uint8_t> buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
+    buffer_t buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
     auto& ed = *(EXTENT_DATA*)buf.data();
     auto& ed2 = *(EXTENT_DATA2*)&ed.data;
 
@@ -1785,7 +1785,7 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
 }
 
 static void set_xattr(root& r, uint64_t inode, const string_view& name, uint32_t hash, const string_view& data) {
-    vector<uint8_t> buf(offsetof(DIR_ITEM, name[0]) + name.size() + data.size());
+    buffer_t buf(offsetof(DIR_ITEM, name[0]) + name.size() + data.size());
     auto& di = *(DIR_ITEM*)buf.data();
 
     di.key.obj_id = di.key.offset = 0;
@@ -2474,7 +2474,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         free(ed);
     } else if (!inline_data.empty()) {
         if (inline_data.length() > max_inline) {
-            vector<uint8_t> buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
+            buffer_t buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
             auto compression = opt_compression;
 
             auto& ed = *(EXTENT_DATA*)buf.data();
@@ -2882,7 +2882,7 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
 
     for (const auto& r : runs2) {
         string data;
-        vector<uint8_t> csums;
+        buffer_t csums;
 
         if (r.offset * cluster_size >= orig_device_size)
             break;
@@ -3099,7 +3099,7 @@ static void populate_root_root(root& root_root) {
 
     add_inode_ref(root_root, BTRFS_ROOT_TREEDIR, BTRFS_ROOT_TREEDIR, 0, "..");
 
-    vector<uint8_t> buf(offsetof(DIR_ITEM, name[0]) + sizeof(default_subvol) - 1);
+    buffer_t buf(offsetof(DIR_ITEM, name[0]) + sizeof(default_subvol) - 1);
 
     auto& di = *(DIR_ITEM*)buf.data();
 

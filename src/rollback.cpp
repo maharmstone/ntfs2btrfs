@@ -5,7 +5,7 @@
 
 using namespace std;
 
-using chunks_t = map<uint64_t, vector<uint8_t>>;
+using chunks_t = map<uint64_t, buffer_t>;
 
 #define INCOMPAT_SUPPORTED (BTRFS_INCOMPAT_FLAGS_MIXED_BACKREF | BTRFS_INCOMPAT_FLAGS_DEFAULT_SUBVOL | BTRFS_INCOMPAT_FLAGS_MIXED_GROUPS | \
                             BTRFS_INCOMPAT_FLAGS_COMPRESS_LZO | BTRFS_INCOMPAT_FLAGS_BIG_METADATA | BTRFS_INCOMPAT_FLAGS_RAID56 | \
@@ -21,8 +21,8 @@ public:
 private:
     superblock read_superblock();
     void read_chunks();
-    vector<uint8_t> read(uint64_t addr, uint32_t len);
-    pair<uint64_t, vector<uint8_t>> find_chunk(uint64_t addr);
+    buffer_t read(uint64_t addr, uint32_t len);
+    pair<uint64_t, buffer_t> find_chunk(uint64_t addr);
 
     fstream f;
     superblock sb;
@@ -84,7 +84,7 @@ superblock btrfs::read_superblock() {
     return sb.value();
 }
 
-pair<uint64_t, vector<uint8_t>> btrfs::find_chunk(uint64_t addr) {
+pair<uint64_t, buffer_t> btrfs::find_chunk(uint64_t addr) {
     for (const auto& c : chunks) {
         if (addr < c.first)
             continue;
@@ -98,7 +98,7 @@ pair<uint64_t, vector<uint8_t>> btrfs::find_chunk(uint64_t addr) {
     throw formatted_error("Could not find chunk for virtual address {:x}.", addr);
 }
 
-vector<uint8_t> btrfs::read(uint64_t addr, uint32_t len) {
+buffer_t btrfs::read(uint64_t addr, uint32_t len) {
     const auto& cp = find_chunk(addr);
     const auto& c = *(CHUNK_ITEM*)cp.second.data();
 
@@ -138,8 +138,7 @@ vector<uint8_t> btrfs::read(uint64_t addr, uint32_t len) {
     if (f.fail())
         throw formatted_error("Error seeking to {:x}.", off);
 
-    vector<uint8_t> ret;
-    ret.resize(len);
+    buffer_t ret(len);
 
     f.read((char*)ret.data(), ret.size());
 
@@ -201,7 +200,7 @@ void btrfs::read_chunks() {
 
         basic_string_view<uint8_t> chunk_item{ptr + sizeof(key), sizeof(ci) + (ci.num_stripes * sizeof(CHUNK_ITEM_STRIPE))};
 
-        chunks.emplace(key.offset, vector<uint8_t>{chunk_item.data(), chunk_item.data() + chunk_item.size()});
+        chunks.emplace(key.offset, buffer_t{chunk_item.data(), chunk_item.data() + chunk_item.size()});
 
         ptr += sizeof(key) + chunk_item.size();
     } while (ptr < &sb.sys_chunk_array[SYS_CHUNK_ARRAY_SIZE]);
@@ -229,7 +228,7 @@ void btrfs::read_chunks() {
         if (key.obj_type != TYPE_CHUNK_ITEM)
             return true;
 
-        chunks2.emplace(key.offset, vector<uint8_t>{data.data(), data.data() + data.size()});
+        chunks2.emplace(key.offset, buffer_t{data.data(), data.data() + data.size()});
 
         return true;
     });
