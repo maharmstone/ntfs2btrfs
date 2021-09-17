@@ -89,27 +89,14 @@ struct data_alloc {
 };
 
 struct tree_item {
-    tree_item() : data(nullptr), len(0) { }
+    tree_item() = default;
 
-    tree_item(const void* data, uint32_t len) : len(len) {
-        if (len == 0)
-            this->data = nullptr;
-        else {
-            this->data = malloc(len);
-            if (!this->data)
-                throw std::bad_alloc();
-
-            memcpy(this->data, data, len);
-        }
+    tree_item(const void* data, uint32_t len) : data(len) {
+        if (len > 0)
+            memcpy(this->data.data(), data, len);
     }
 
-    ~tree_item() {
-        if (data)
-            free(data);
-    }
-
-    void* data;
-    uint32_t len;
+    std::vector<uint8_t> data;
 };
 
 static bool inline operator<(const KEY& a, const KEY& b) {
