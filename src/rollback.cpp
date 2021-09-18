@@ -17,12 +17,12 @@ public:
     btrfs(const string& fn);
     uint64_t find_root_addr(uint64_t root);
     bool walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func);
+    const pair<const uint64_t, buffer_t>& find_chunk(uint64_t addr);
 
 private:
     superblock read_superblock();
     void read_chunks();
     buffer_t read(uint64_t addr, uint32_t len);
-    pair<uint64_t, buffer_t> find_chunk(uint64_t addr);
 
     fstream f;
     superblock sb;
@@ -84,7 +84,7 @@ superblock btrfs::read_superblock() {
     return sb.value();
 }
 
-pair<uint64_t, buffer_t> btrfs::find_chunk(uint64_t addr) {
+const pair<const uint64_t, buffer_t>& btrfs::find_chunk(uint64_t addr) {
     for (const auto& c : chunks) {
         if (addr < c.first)
             continue;
@@ -106,7 +106,7 @@ buffer_t btrfs::read(uint64_t addr, uint32_t len) {
         throw runtime_error("FIXME - RAID 0");
     else if (c.type & BLOCK_FLAG_RAID1)
         throw runtime_error("FIXME - RAID 1");
-    else if (c.type & BLOCK_FLAG_RAID1)
+    else if (c.type & BLOCK_FLAG_DUPLICATE)
         throw runtime_error("FIXME - DUPLICATE");
     else if (c.type & BLOCK_FLAG_RAID10)
         throw runtime_error("FIXME - RAID10");
@@ -327,13 +327,36 @@ void rollback(const string& fn) {
         return true;
     });
 
+    // resolve logical addresses to physical
+
     for (const auto& e : extents) {
-        fmt::print("{:x}, {:x}, {:x}\n", e.first, e.second.first, e.second.second);
+        auto off = e.first;
+        auto addr = e.second.first;
+        auto len = e.second.second;
+
+        auto& c = b.find_chunk(addr);
+        auto& ci = *(CHUNK_ITEM*)c.second.data();
+
+        if (ci.type & (BLOCK_FLAG_RAID0 | BLOCK_FLAG_RAID1 | BLOCK_FLAG_DUPLICATE |
+                       BLOCK_FLAG_RAID10 | BLOCK_FLAG_RAID5 | BLOCK_FLAG_RAID6 |
+                       BLOCK_FLAG_RAID1C3 | BLOCK_FLAG_RAID1C4)) {
+            throw formatted_error("Data chunk {:x} was not SINGLE, cannot process.",
+                                  c.first);
+        }
+
+        auto* cis = (CHUNK_ITEM_STRIPE*)(&ci + 1);
+
+        auto physoff = addr - c.first + cis[0].offset;
+
+        if (off == physoff) // identity map
+            continue;
+
+        fmt::print("{:x}, {:x}, {:x} ({:x})\n", off, addr, len, physoff);
     }
 
-    // FIXME - resolve logical addresses to physical
-    // FIXME - remove identity maps
     // FIXME - copy over relocations
+
+    // FIXME - TRIM?
 
     throw runtime_error("FIXME");
 }
