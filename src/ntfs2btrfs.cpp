@@ -72,6 +72,8 @@ static const uint16_t max_inline = 2048;
 static const uint64_t max_extent_size = 0x8000000; // 128 MB
 static const uint64_t max_comp_extent_size = 0x20000; // 128 KB
 
+static const char chunk_error_message[] = "Could not find enough space to create new chunk. Try clearing a few gigabytes of space, or defragging.";
+
 #define EA_NTACL "security.NTACL"
 #define EA_NTACL_HASH 0x45922146
 
@@ -388,7 +390,7 @@ static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) 
     }
 
     if (!found)
-        throw formatted_error("Could not find enough space to create new chunk.");
+        throw formatted_error(chunk_error_message);
 
     chunks.emplace_back(disk_offset + chunk_virt_offset, chunk_size, disk_offset, system_chunk ? BLOCK_FLAG_SYSTEM : BLOCK_FLAG_METADATA);
 
@@ -460,7 +462,7 @@ static uint64_t allocate_data(uint64_t length, bool change_used) {
     }
 
     if (!found)
-        throw formatted_error("Could not find enough space to create new chunk.");
+        throw formatted_error(chunk_error_message);
 
     chunks.emplace_back(disk_offset + chunk_virt_offset, data_chunk_size, disk_offset, BLOCK_FLAG_DATA);
 
