@@ -719,13 +719,13 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
 
 void root::write_trees(ntfs& dev) {
     for (const auto& t : trees) {
-        auto th = (tree_header*)t.data();
-        uint64_t addr = th->address;
+        auto& th = *(tree_header*)t.data();
+        uint64_t addr = th.address;
         bool found = false;
 
         for (const auto& c : chunks) {
             if (c.offset <= addr && c.offset + c.length >= addr + tree_size) {
-                uint64_t physaddr = th->address - c.offset + c.disk_start;
+                uint64_t physaddr = th.address - c.offset + c.disk_start;
 
                 // FIXME - handle DUP
 
