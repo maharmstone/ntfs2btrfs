@@ -493,22 +493,22 @@ static uint64_t allocate_data(uint64_t length, bool change_used) {
     throw formatted_error("Could not allocate data address");
 }
 
-static void calc_tree_hash(tree_header* th, enum btrfs_csum_type csum_type) {
+static void calc_tree_hash(tree_header& th, enum btrfs_csum_type csum_type) {
     switch (csum_type) {
         case btrfs_csum_type::crc32c:
-            *(uint32_t*)th->csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th->fs_uuid, tree_size - (uint32_t)sizeof(th->csum));
+            *(uint32_t*)th.csum = ~calc_crc32c(0xffffffff, (uint8_t*)&th.fs_uuid, tree_size - (uint32_t)sizeof(th.csum));
             break;
 
         case btrfs_csum_type::xxhash:
-            *(uint64_t*)th->csum = XXH64((uint8_t*)&th->fs_uuid, tree_size - sizeof(th->csum), 0);
+            *(uint64_t*)th.csum = XXH64((uint8_t*)&th.fs_uuid, tree_size - sizeof(th.csum), 0);
             break;
 
         case btrfs_csum_type::sha256:
-            calc_sha256((uint8_t*)th, &th->fs_uuid, tree_size - sizeof(th->csum));
+            calc_sha256((uint8_t*)&th, &th.fs_uuid, tree_size - sizeof(th.csum));
             break;
 
         case btrfs_csum_type::blake2:
-            blake2b(th, 32, &th->fs_uuid, tree_size - sizeof(th->csum));
+            blake2b(&th, 32, &th.fs_uuid, tree_size - sizeof(th.csum));
             break;
 
         default:
@@ -549,7 +549,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
                 addresses.push_back(th.address);
                 th.num_items = num_items;
 
-                calc_tree_hash(&th, csum_type);
+                calc_tree_hash(th, csum_type);
 
                 trees.push_back(buf);
                 metadata_size += tree_size;
@@ -599,7 +599,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
         addresses.push_back(th.address);
         th.num_items = num_items;
 
-        calc_tree_hash(&th, csum_type);
+        calc_tree_hash(th, csum_type);
 
         trees.push_back(buf);
         metadata_size += tree_size;
@@ -655,7 +655,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
                 addresses.push_back(th.address);
                 th.num_items = num_items;
 
-                calc_tree_hash(&th, csum_type);
+                calc_tree_hash(th, csum_type);
 
                 trees.push_back(buf);
                 metadata_size += tree_size;
@@ -700,7 +700,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
             addresses.push_back(th.address);
             th.num_items = num_items;
 
-            calc_tree_hash(&th, csum_type);
+            calc_tree_hash(th, csum_type);
 
             trees.push_back(buf);
             metadata_size += tree_size;
@@ -973,7 +973,7 @@ static void update_root_root(root& root_root, enum btrfs_csum_type csum_type) {
         }
 
         if (changed)
-            calc_tree_hash(&th, csum_type);
+            calc_tree_hash(th, csum_type);
     }
 }
 
@@ -1021,7 +1021,7 @@ static void update_extent_root(root& extent_root, enum btrfs_csum_type csum_type
         }
 
         if (changed)
-            calc_tree_hash(&th, csum_type);
+            calc_tree_hash(th, csum_type);
     }
 }
 
@@ -1089,7 +1089,7 @@ static void update_chunk_root(root& chunk_root, enum btrfs_csum_type csum_type) 
                     di->bytes_used += c.length;
                 }
 
-                calc_tree_hash(&th, csum_type);
+                calc_tree_hash(th, csum_type);
 
                 return;
             }
