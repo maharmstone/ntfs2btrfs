@@ -958,13 +958,13 @@ static void update_root_root(root& root_root, enum btrfs_csum_type csum_type) {
 
         for (unsigned int i = 0; i < th.num_items; i++) {
             if (ln[i].key.obj_type == TYPE_ROOT_ITEM) {
-                auto ri = (ROOT_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
+                auto& ri = *(ROOT_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
 
                 for (const auto& r : roots) {
                     if (r.id == ln[i].key.obj_id) {
-                        ri->block_number = r.tree_addr;
-                        ri->root_level = r.level;
-                        ri->bytes_used = r.metadata_size;
+                        ri.block_number = r.tree_addr;
+                        ri.root_level = r.level;
+                        ri.bytes_used = r.metadata_size;
 
                         changed = true;
                     }
