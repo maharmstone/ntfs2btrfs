@@ -2876,8 +2876,7 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
     }
 
     for (const auto& r : runs2) {
-        string data;
-        buffer_t csums;
+        buffer_t data, csums;
 
         if (r.offset * cluster_size >= orig_device_size)
             break;
@@ -2886,9 +2885,9 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
         csums.resize((size_t)(r.length * cluster_size * csum_size / sector_size));
 
         dev.seek(r.offset * cluster_size);
-        dev.read(data.data(), data.length());
+        dev.read((char*)data.data(), data.size());
 
-        string_view sv = data;
+        auto sv = string_view((char*)data.data(), data.size());
 
         auto msg = [&]() {
             num++;
