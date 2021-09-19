@@ -3098,7 +3098,8 @@ static void calc_used_space(const runs_t& runs, uint32_t cluster_size) {
         for (auto& c : chunks) {
             if (offset == c.offset) {
                 for (const auto& r : rl.second) {
-                    c.used += r.length * cluster_size;
+                    if ((r.offset * cluster_size) + chunk_virt_offset - c.offset < c.length)
+                        c.used += r.length * cluster_size;
                 }
 
                 break;
