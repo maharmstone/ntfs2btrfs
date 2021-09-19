@@ -2974,20 +2974,20 @@ static void protect_cluster(ntfs& dev, runs_t& runs, uint64_t cluster) {
     if (!split_runs(dev, runs, cluster, 1, dummy_inode, 0))
         return;
 
-    string sb;
+    buffer_t data;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     uint64_t addr = allocate_data(cluster_size, false) - chunk_virt_offset;
 
     if ((cluster + 1) * cluster_size > orig_device_size)
-        sb.resize((size_t)(orig_device_size - (cluster * cluster_size)));
+        data.resize((size_t)(orig_device_size - (cluster * cluster_size)));
     else
-        sb.resize((size_t)cluster_size);
+        data.resize((size_t)cluster_size);
 
     dev.seek(cluster * cluster_size);
-    dev.read(sb.data(), sb.length());
+    dev.read((char*)data.data(), data.size());
 
     dev.seek(addr);
-    dev.write(sb.data(), sb.length());
+    dev.write((char*)data.data(), data.size());
 
     relocs.emplace_back(cluster, 1, addr / cluster_size);
 
