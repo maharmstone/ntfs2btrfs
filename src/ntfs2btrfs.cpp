@@ -1001,21 +1001,21 @@ static BTRFS_UUID generate_uuid(default_random_engine& gen) {
 
 static void update_extent_root(root& extent_root, enum btrfs_csum_type csum_type) {
     for (auto& t : extent_root.trees) {
-        auto th = (tree_header*)t.data();
+        auto& th = *(tree_header*)t.data();
 
-        if (th->level > 0)
+        if (th.level > 0)
             return;
 
         auto ln = (leaf_node*)((uint8_t*)t.data() + sizeof(tree_header));
         bool changed = true;
 
-        for (unsigned int i = 0; i < th->num_items; i++) {
+        for (unsigned int i = 0; i < th.num_items; i++) {
             if (ln[i].key.obj_type == TYPE_BLOCK_GROUP_ITEM) {
-                auto bgi = (BLOCK_GROUP_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
+                auto& bgi = *(BLOCK_GROUP_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
 
                 for (const auto& c : chunks) {
                     if (c.offset == ln[i].key.obj_id) {
-                        bgi->used = c.used;
+                        bgi.used = c.used;
 
                         changed = true;
                     }
@@ -1024,7 +1024,7 @@ static void update_extent_root(root& extent_root, enum btrfs_csum_type csum_type
         }
 
         if (changed)
-            calc_tree_hash(th, csum_type);
+            calc_tree_hash(&th, csum_type);
     }
 }
 
