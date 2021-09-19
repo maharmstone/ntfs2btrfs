@@ -19,6 +19,7 @@ public:
     bool walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func);
     const pair<const uint64_t, buffer_t>& find_chunk(uint64_t addr);
     buffer_t raw_read(uint64_t phys_addr, uint32_t len);
+    void raw_write(uint64_t phys_addr, const buffer_t& buf);
 
 private:
     superblock read_superblock();
@@ -115,6 +116,20 @@ buffer_t btrfs::raw_read(uint64_t phys_addr, uint32_t len) {
         throw formatted_error("Error reading {:x} bytes at {:x}.", ret.size(), phys_addr);
 
     return ret;
+}
+
+void btrfs::raw_write(uint64_t phys_addr, const buffer_t& buf) {
+    // FIXME - WriteFile on Windows
+
+    f.seekg(phys_addr);
+
+    if (f.fail())
+        throw formatted_error("Error seeking to {:x}.", phys_addr);
+
+    f.write((char*)buf.data(), buf.size());
+
+    if (f.fail())
+        throw formatted_error("Error writing {:x} bytes at {:x}.", buf.size(), phys_addr);
 }
 
 buffer_t btrfs::read(uint64_t addr, uint32_t len) {
@@ -364,9 +379,11 @@ void rollback(const string& fn) {
         r.swap(buf);
     }
 
-    // FIXME - copy over relocations
+    for (const auto& r : relocs) {
+        b.raw_write(r.first, r.second);
+    }
 
     // FIXME - TRIM?
 
-    throw runtime_error("FIXME");
+    fmt::print("Device successfully rolled back to NTFS.\n");
 }

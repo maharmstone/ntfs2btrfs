@@ -3440,8 +3440,10 @@ Convert an NTFS filesystem to Btrfs.
         check_cpu();
 #endif
 
-        if (do_rollback)
+        if (do_rollback) {
             rollback(fn);
+            return 0;
+        }
 
 #ifndef WITH_ZLIB
         if (compression == btrfs_compression::zlib)
