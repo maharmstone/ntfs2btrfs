@@ -40,6 +40,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <sys/mman.h>
 #endif
 
 #include "config.h"
@@ -2798,6 +2800,25 @@ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint
     }
 }
 
+#ifndef _WIN32 // FIXME - also for Windows
+class memory_map {
+public:
+    memory_map(int fd, uint64_t off, size_t length) : length(length) {
+        ptr = (uint8_t*)mmap(nullptr, length, PROT_READ, MAP_SHARED, fd, off);
+
+        if (ptr == MAP_FAILED)
+            throw formatted_error("mmap failed (errno = {})", errno);
+    }
+
+    ~memory_map() {
+        munmap(ptr, length);
+    }
+
+    uint8_t* ptr;
+    size_t length;
+};
+#endif
+
 static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_csum_type csum_type) {
     uint32_t sector_size = 0x1000; // FIXME
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
@@ -2875,19 +2896,36 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
         total += r.length;
     }
 
+#ifndef _WIN32
+    unique_ptr<memory_map> mm;
+    uint64_t old_chunk = 0;
+#endif
+
     for (const auto& r : runs2) {
-        buffer_t data, csums;
+        buffer_t csums;
 
         if (r.offset * cluster_size >= orig_device_size)
             break;
 
-        data.resize((size_t)(r.length * cluster_size));
         csums.resize((size_t)(r.length * cluster_size * csum_size / sector_size));
+
+#ifndef _WIN32
+        uint64_t chunk = (r.offset * cluster_size) / data_chunk_size;
+
+        if (!mm || old_chunk != chunk) {
+            mm.reset(new memory_map(dev.fd, chunk * data_chunk_size, min(data_chunk_size, orig_device_size - (chunk * data_chunk_size))));
+            old_chunk = chunk;
+        }
+
+        string_view sv((char*)mm->ptr + ((r.offset * cluster_size) % data_chunk_size), r.length * cluster_size);
+#else
+        buffer_t data((size_t)(r.length * cluster_size));
 
         dev.seek(r.offset * cluster_size);
         dev.read((char*)data.data(), data.size());
 
         auto sv = string_view((char*)data.data(), data.size());
+#endif
 
         auto msg = [&]() {
             num++;

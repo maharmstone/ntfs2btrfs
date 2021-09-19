@@ -424,7 +424,6 @@ public:
     NTFS_BOOT_SECTOR* boot_sector;
     uint64_t file_record_size;
 
-private:
 #ifdef _WIN32
     HANDLE h;
 #else
