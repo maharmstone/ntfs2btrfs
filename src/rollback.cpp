@@ -18,6 +18,7 @@ public:
     uint64_t find_root_addr(uint64_t root);
     bool walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func);
     const pair<const uint64_t, buffer_t>& find_chunk(uint64_t addr);
+    buffer_t raw_read(uint64_t phys_addr, uint32_t len);
 
 private:
     superblock read_superblock();
@@ -98,6 +99,24 @@ const pair<const uint64_t, buffer_t>& btrfs::find_chunk(uint64_t addr) {
     throw formatted_error("Could not find chunk for virtual address {:x}.", addr);
 }
 
+buffer_t btrfs::raw_read(uint64_t phys_addr, uint32_t len) {
+    // FIXME - ReadFile on Windows
+
+    f.seekg(phys_addr);
+
+    if (f.fail())
+        throw formatted_error("Error seeking to {:x}.", phys_addr);
+
+    buffer_t ret(len);
+
+    f.read((char*)ret.data(), ret.size());
+
+    if (f.fail())
+        throw formatted_error("Error reading {:x} bytes at {:x}.", ret.size(), phys_addr);
+
+    return ret;
+}
+
 buffer_t btrfs::read(uint64_t addr, uint32_t len) {
     const auto& cp = find_chunk(addr);
     const auto& c = *(CHUNK_ITEM*)cp.second.data();
@@ -129,23 +148,7 @@ buffer_t btrfs::read(uint64_t addr, uint32_t len) {
     if (cis[0].dev_id != sb.dev_item.dev_id)
         throw runtime_error("Reading from other device not implemented.");
 
-    uint64_t off = addr - cp.first + cis[0].offset;
-
-    // FIXME - ReadFile on Windows
-
-    f.seekg(off);
-
-    if (f.fail())
-        throw formatted_error("Error seeking to {:x}.", off);
-
-    buffer_t ret(len);
-
-    f.read((char*)ret.data(), ret.size());
-
-    if (f.fail())
-        throw formatted_error("Error reading {:x} bytes at {:x}.", ret.size(), off);
-
-    return ret;
+    return raw_read(addr - cp.first + cis[0].offset, len);
 }
 
 bool btrfs::walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func) {
@@ -329,6 +332,8 @@ void rollback(const string& fn) {
 
     // resolve logical addresses to physical
 
+    map<uint64_t, buffer_t> relocs;
+
     for (const auto& e : extents) {
         auto off = e.first;
         auto addr = e.second.first;
@@ -351,7 +356,12 @@ void rollback(const string& fn) {
         if (off == physoff) // identity map
             continue;
 
-        fmt::print("{:x}, {:x}, {:x} ({:x})\n", off, addr, len, physoff);
+        relocs.emplace(off, buffer_t{});
+
+        auto& r = relocs.at(off);
+        auto buf = b.raw_read(physoff, (uint32_t)len);
+
+        r.swap(buf);
     }
 
     // FIXME - copy over relocations
