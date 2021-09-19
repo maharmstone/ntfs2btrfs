@@ -18,7 +18,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <fstream>
 #include <vector>
 #include <string>
 #include <list>
@@ -26,6 +25,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
 #pragma pack(push,1)
@@ -409,6 +410,8 @@ public:
 
 #ifdef _WIN32
         CloseHandle(h);
+#else
+        close(fd);
 #endif
     }
 
@@ -425,6 +428,6 @@ private:
 #ifdef _WIN32
     HANDLE h;
 #else
-    std::fstream f;
+    int fd;
 #endif
 };

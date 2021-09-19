@@ -1,6 +1,7 @@
 #include "ntfs2btrfs.h"
 #include "crc32c.h"
 #include <iostream>
+#include <fstream>
 #include <functional>
 
 using namespace std;

@@ -23,6 +23,12 @@
 #include <codecvt>
 #include <algorithm>
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
 using namespace std;
 
 map<uint32_t, string> sd_list;
@@ -312,10 +318,10 @@ ntfs::ntfs(const string& fn) {
     }
 
 #else
-    f = fstream(fn, ios_base::in | ios_base::out | ios::binary);
+    fd = open(fn.c_str(), O_RDWR | O_EXCL);
 
-    if (!f.good())
-        throw formatted_error("Failed to open {}.", fn);
+    if (fd < 0)
+        throw formatted_error("open returned {}.", fd);
 #endif
 
     // read NTFS_BOOT_SECTOR
@@ -756,10 +762,8 @@ void ntfs::seek(uint64_t pos) {
         throw formatted_error("SetFilePointerEx failed (error {}).", le);
     }
 #else
-    f.seekg(pos);
-
-    if (f.fail())
-        throw formatted_error("Error seeking to {:x}.", pos);
+    if (lseek(fd, pos, SEEK_SET) == -1)
+        throw formatted_error("Error seeking to {:x} (errno = {}).", pos, errno);
 #endif
 }
 
@@ -773,12 +777,21 @@ void ntfs::read(char* buf, size_t length) {
         throw formatted_error("ReadFile failed (error {}).", le);
     }
 #else
-    auto pos = f.tellg();
+    auto pos = lseek(fd, 0, SEEK_CUR);
+    auto orig_length = length;
 
-    f.read(buf, length);
+    do {
+        auto ret = ::read(fd, buf, length);
 
-    if (f.fail())
-        throw formatted_error("Error reading {:x} bytes at {:x}.", length, pos);
+        if (ret < 0)
+            throw formatted_error("Error reading {:x} bytes at {:x} (errno {}).", orig_length, pos, errno);
+
+        if ((size_t)ret == length)
+            break;
+
+        buf += ret;
+        length -= ret;
+    } while (true);
 #endif
 }
 
@@ -792,11 +805,20 @@ void ntfs::write(const char* buf, size_t length) {
         throw formatted_error("WriteFile failed (error {}).", le);
     }
 #else
-    auto pos = f.tellg();
+    auto pos = lseek(fd, 0, SEEK_CUR);
+    auto orig_length = length;
 
-    f.write(buf, length);
+    do {
+        auto ret = ::write(fd, buf, length);
 
-    if (f.fail())
-        throw formatted_error("Error writing {:x} bytes at {:x}.", length, pos);
+        if (ret < 0)
+            throw formatted_error("Error writing {:x} bytes at {:x} (errno {}).", orig_length, pos, errno);
+
+        if ((size_t)ret == length)
+            break;
+
+        buf += ret;
+        length -= ret;
+    } while (true);
 #endif
 }
