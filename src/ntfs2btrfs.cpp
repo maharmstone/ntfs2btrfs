@@ -1081,12 +1081,12 @@ static void update_chunk_root(root& chunk_root, enum btrfs_csum_type csum_type) 
 
         for (unsigned int i = 0; i < th.num_items; i++) {
             if (ln[i].key.obj_id == 1 && ln[i].key.obj_type == TYPE_DEV_ITEM && ln[i].key.offset == 1) {
-                auto di = (DEV_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
+                auto& di = *(DEV_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
 
-                di->bytes_used = 0;
+                di.bytes_used = 0;
 
                 for (const auto& c : chunks) {
-                    di->bytes_used += c.length;
+                    di.bytes_used += c.length;
                 }
 
                 calc_tree_hash(th, csum_type);
