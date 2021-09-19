@@ -948,15 +948,15 @@ static void add_to_root_root(const root& r, root& root_root) {
 
 static void update_root_root(root& root_root, enum btrfs_csum_type csum_type) {
     for (auto& t : root_root.trees) {
-        auto th = (tree_header*)t.data();
+        auto& th = *(tree_header*)t.data();
 
-        if (th->level > 0)
+        if (th.level > 0)
             return;
 
         auto ln = (leaf_node*)((uint8_t*)t.data() + sizeof(tree_header));
         bool changed = true;
 
-        for (unsigned int i = 0; i < th->num_items; i++) {
+        for (unsigned int i = 0; i < th.num_items; i++) {
             if (ln[i].key.obj_type == TYPE_ROOT_ITEM) {
                 auto ri = (ROOT_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
 
@@ -973,7 +973,7 @@ static void update_root_root(root& root_root, enum btrfs_csum_type csum_type) {
         }
 
         if (changed)
-            calc_tree_hash(th, csum_type);
+            calc_tree_hash(&th, csum_type);
     }
 }
 
