@@ -49,9 +49,13 @@ superblock btrfs::read_superblock() {
 
     // find length of volume
     // FIXME - Windows version
-    f.ignore(numeric_limits<streamsize>::max());
-    uint64_t device_size = f.gcount();
-    f.clear();
+
+    f.seekg(0, ios::end);
+
+    if (f.fail())
+        throw runtime_error("Error seeking to end of device.");
+
+    uint64_t device_size = f.tellg();
 
     unsigned int i = 0;
     while (superblock_addrs[i] != 0 && superblock_addrs[i] + sizeof(superblock) < device_size) {
