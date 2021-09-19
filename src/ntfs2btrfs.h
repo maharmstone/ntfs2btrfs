@@ -139,7 +139,7 @@ public:
 
     uint64_t id;
     std::map<KEY, buffer_t> items;
-    std::vector<std::string> trees;
+    std::vector<buffer_t> trees;
     uint64_t tree_addr;
     uint8_t level;
     uint64_t metadata_size = 0;
