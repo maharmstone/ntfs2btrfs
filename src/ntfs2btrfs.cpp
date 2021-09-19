@@ -1072,14 +1072,14 @@ static void populate_fstree(root& r) {
 
 static void update_chunk_root(root& chunk_root, enum btrfs_csum_type csum_type) {
     for (auto& t : chunk_root.trees) {
-        auto th = (tree_header*)t.data();
+        auto& th = *(tree_header*)t.data();
 
-        if (th->level > 0)
+        if (th.level > 0)
             return;
 
         auto ln = (leaf_node*)((uint8_t*)t.data() + sizeof(tree_header));
 
-        for (unsigned int i = 0; i < th->num_items; i++) {
+        for (unsigned int i = 0; i < th.num_items; i++) {
             if (ln[i].key.obj_id == 1 && ln[i].key.obj_type == TYPE_DEV_ITEM && ln[i].key.offset == 1) {
                 auto di = (DEV_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
 
@@ -1089,7 +1089,7 @@ static void update_chunk_root(root& chunk_root, enum btrfs_csum_type csum_type) 
                     di->bytes_used += c.length;
                 }
 
-                calc_tree_hash(th, csum_type);
+                calc_tree_hash(&th, csum_type);
 
                 return;
             }
