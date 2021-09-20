@@ -2248,11 +2248,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     memset(&ii, 0, sizeof(INODE_ITEM));
 
+    const auto& si = *(const STANDARD_INFORMATION*)standard_info.data();
+
     if (standard_info.size() >= offsetof(STANDARD_INFORMATION, MaximumVersions)) {
-        auto si = reinterpret_cast<const STANDARD_INFORMATION*>(standard_info.data());
         uint32_t defda = 0;
 
-        atts = si->FileAttributes;
+        atts = si.FileAttributes;
 
         if (links.size() == 1 && get<1>(links[0])[0] == '.')
             defda |= FILE_ATTRIBUTE_HIDDEN;
@@ -2275,18 +2276,14 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     }
 
     if (standard_info.size() >= offsetof(STANDARD_INFORMATION, OwnerId)) {
-        auto si = reinterpret_cast<const STANDARD_INFORMATION*>(standard_info.data());
-
-        ii.otime = win_time_to_unix(si->CreationTime);
-        ii.st_atime = win_time_to_unix(si->LastAccessTime);
-        ii.st_mtime = win_time_to_unix(si->LastWriteTime);
-        ii.st_ctime = win_time_to_unix(si->ChangeTime);
+        ii.otime = win_time_to_unix(si.CreationTime);
+        ii.st_atime = win_time_to_unix(si.LastAccessTime);
+        ii.st_mtime = win_time_to_unix(si.LastWriteTime);
+        ii.st_ctime = win_time_to_unix(si.ChangeTime);
     }
 
     if (sd.empty() && standard_info.size() >= offsetof(STANDARD_INFORMATION, QuotaCharged)) {
-        auto si = reinterpret_cast<const STANDARD_INFORMATION*>(standard_info.data());
-
-        sd = find_sd(si->SecurityId, secure, dev);
+        sd = find_sd(si.SecurityId, secure, dev);
 
         if (sd.empty()) {
             clear_line();
@@ -2294,7 +2291,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             if (filename.empty())
                 filename = f.get_filename();
 
-            fmt::print(stderr, "Could not find SecurityId {} ({})\n", si->SecurityId, filename);
+            fmt::print(stderr, "Could not find SecurityId {} ({})\n", si.SecurityId, filename);
         }
     }
 
