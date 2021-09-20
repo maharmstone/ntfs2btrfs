@@ -2849,8 +2849,8 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
 
     // split and merge runs
 
-    for (auto& r : runs) {
-        auto& rs = r.second;
+    for (auto& r2 : runs) {
+        auto& rs = r2.second;
         bool first = true;
 
         while (!rs.empty()) {
