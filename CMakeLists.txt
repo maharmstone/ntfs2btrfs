@@ -17,9 +17,18 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(fmt REQUIRED)
+find_package(PkgConfig REQUIRED)
 
 if(WITH_ZLIB)
     find_package(ZLIB REQUIRED)
+endif()
+
+if(WITH_LZO)
+    pkg_check_modules(LZO REQUIRED lzo2)
+endif()
+
+if(WITH_ZSTD)
+    pkg_check_modules(ZSTD REQUIRED libzstd)
 endif()
 
 set(SRC_FILES src/ntfs2btrfs.cpp
@@ -56,11 +65,11 @@ if(WITH_ZLIB)
 endif()
 
 if(WITH_LZO)
-    target_link_libraries(ntfs2btrfs lzo2)
+    target_link_libraries(ntfs2btrfs ${LZO_LINK_LIBRARIES})
 endif()
 
 if(WITH_ZSTD)
-    target_link_libraries(ntfs2btrfs zstd)
+    target_link_libraries(ntfs2btrfs ${ZSTD_LINK_LIBRARIES})
 endif()
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
