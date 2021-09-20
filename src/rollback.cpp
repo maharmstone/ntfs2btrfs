@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <functional>
+#include <codecvt>
 
 using namespace std;
 
@@ -16,6 +17,13 @@ using chunks_t = map<uint64_t, buffer_t>;
 class btrfs {
 public:
     btrfs(const string& fn);
+
+#ifdef _WIN32
+    ~btrfs() {
+        CloseHandle(h);
+    }
+#endif
+
     uint64_t find_root_addr(uint64_t root);
     bool walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func);
     const pair<const uint64_t, buffer_t>& find_chunk(uint64_t addr);
@@ -27,18 +35,54 @@ private:
     void read_chunks();
     buffer_t read(uint64_t addr, uint32_t len);
 
+#ifdef _WIN32
+    HANDLE h;
+#else
     fstream f;
+#endif
     superblock sb;
     chunks_t chunks;
 };
 
 
 btrfs::btrfs(const string& fn) {
-    // FIXME - CreateFile on Windows
+#ifdef _WIN32
+    bool drive = false;
+    DWORD ret;
+    wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
+    u16string namew;
+
+    if ((fn.length() == 2 || fn.length() == 3) && fn[0] >= 'A' && fn[0] <= 'Z' && fn[1] == ':' && (fn.length() == 2 || fn[2] == '\\')) {
+        namew = u"\\\\.\\X:";
+        namew[4] = fn[0];
+        drive = true;
+    } else
+        namew = convert.from_bytes(fn.data(), fn.data() + fn.length());
+
+    h = CreateFileW((WCHAR*)namew.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+
+    if (h == INVALID_HANDLE_VALUE) {
+        auto le = GetLastError();
+
+        throw formatted_error("Could not open {} (error {}).", fn, le);
+    }
+
+    if (drive) {
+        if (!DeviceIoControl(h, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &ret, nullptr)) {
+            auto le = GetLastError();
+
+            CloseHandle(h);
+
+            throw formatted_error("Could not lock volume (error {}).", le);
+        }
+    }
+#else
     f = fstream(fn, ios_base::in | ios_base::out | ios::binary);
 
     if (!f.good())
         throw formatted_error("Failed to open {}.", fn);
+#endif
 
     sb = read_superblock();
 
@@ -47,27 +91,31 @@ btrfs::btrfs(const string& fn) {
 
 superblock btrfs::read_superblock() {
     optional<superblock> sb;
+    uint64_t device_size;
 
     // find length of volume
-    // FIXME - Windows version
 
+#ifdef _WIN32
+    LARGE_INTEGER li;
+
+    if (!GetFileSizeEx(h, &li))
+        throw formatted_error("GetFileSizeEx failed (error {}).", GetLastError());
+
+    device_size = li.QuadPart;
+#else
     f.seekg(0, ios::end);
 
     if (f.fail())
         throw runtime_error("Error seeking to end of device.");
 
-    uint64_t device_size = f.tellg();
+    device_size = f.tellg();
+#endif
 
     unsigned int i = 0;
     while (superblock_addrs[i] != 0 && superblock_addrs[i] + sizeof(superblock) < device_size) {
-        superblock sb2;
+        auto buf = raw_read(superblock_addrs[i], sizeof(superblock));
 
-        f.seekg(superblock_addrs[i], ios_base::beg);
-
-        f.read((char*)&sb2, sizeof(superblock));
-
-        if (f.fail())
-            throw formatted_error("Error reading superblock at {:x}.", superblock_addrs[i]);
+        const auto& sb2 = *(superblock*)buf.data();
 
         if (sb2.magic != BTRFS_MAGIC) {
             i++;
@@ -106,35 +154,75 @@ const pair<const uint64_t, buffer_t>& btrfs::find_chunk(uint64_t addr) {
 }
 
 buffer_t btrfs::raw_read(uint64_t phys_addr, uint32_t len) {
-    // FIXME - ReadFile on Windows
+#ifdef _WIN32
+    LARGE_INTEGER posli;
 
+    posli.QuadPart = phys_addr;
+
+    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN)) {
+        auto le = GetLastError();
+
+        throw formatted_error("SetFilePointerEx failed (error {}).", le);
+    }
+#else
     f.seekg(phys_addr);
 
     if (f.fail())
         throw formatted_error("Error seeking to {:x}.", phys_addr);
+#endif
 
     buffer_t ret(len);
 
+#ifdef _WIN32
+    DWORD read;
+
+    if (!ReadFile(h, ret.data(), (DWORD)len, &read, nullptr)) {
+        auto le = GetLastError();
+
+        throw formatted_error("ReadFile failed (error {}).", le);
+    }
+#else
     f.read((char*)ret.data(), ret.size());
 
     if (f.fail())
         throw formatted_error("Error reading {:x} bytes at {:x}.", ret.size(), phys_addr);
+#endif
 
     return ret;
 }
 
 void btrfs::raw_write(uint64_t phys_addr, const buffer_t& buf) {
-    // FIXME - WriteFile on Windows
+#ifdef _WIN32
+    LARGE_INTEGER posli;
 
+    posli.QuadPart = phys_addr;
+
+    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN)) {
+        auto le = GetLastError();
+
+        throw formatted_error("SetFilePointerEx failed (error {}).", le);
+    }
+#else
     f.seekg(phys_addr);
 
     if (f.fail())
         throw formatted_error("Error seeking to {:x}.", phys_addr);
+#endif
 
+#ifdef _WIN32
+    DWORD written;
+
+    if (!WriteFile(h, buf.data(), (DWORD)buf.size(), &written, nullptr)) {
+        auto le = GetLastError();
+
+        throw formatted_error("WriteFile failed (error {}).", le);
+    }
+#else
     f.write((char*)buf.data(), buf.size());
 
     if (f.fail())
         throw formatted_error("Error writing {:x} bytes at {:x}.", buf.size(), phys_addr);
+#endif
 }
 
 buffer_t btrfs::read(uint64_t addr, uint32_t len) {
