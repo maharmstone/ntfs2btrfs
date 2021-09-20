@@ -379,7 +379,7 @@ void rollback(const string& fn) {
         relocs.emplace(off, buffer_t{});
 
         auto& r = relocs.at(off);
-        auto buf = b.raw_read(physoff, (uint32_t)len);
+        auto buf = b.raw_read(physoff, (uint32_t)len); // FIXME - check csum?
 
         r.swap(buf);
     }
