@@ -14,6 +14,7 @@ option(WITH_LZO "Include lzo support" ON)
 option(WITH_ZSTD "Include zstd support" ON)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ntfs2btrfs.8.in ${CMAKE_CURRENT_BINARY_DIR}/ntfs2btrfs.8)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -89,4 +90,4 @@ else()
 endif()
 
 install(TARGETS ntfs2btrfs DESTINATION sbin)
-install(FILES ntfs2btrfs.8 DESTINATION ${CMAKE_INSTALL_MANDIR})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ntfs2btrfs.8 DESTINATION ${CMAKE_INSTALL_MANDIR})
