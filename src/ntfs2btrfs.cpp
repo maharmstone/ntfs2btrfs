@@ -2231,6 +2231,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                 if (inline_data.length() >= file_size) {
                     inline_data.resize((size_t)file_size);
+                    mappings.clear();
                     break;
                 }
             }
