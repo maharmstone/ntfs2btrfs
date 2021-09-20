@@ -62,19 +62,14 @@ btrfs::btrfs(const string& fn) {
     h = CreateFileW((WCHAR*)namew.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
                     nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
-    if (h == INVALID_HANDLE_VALUE) {
-        auto le = GetLastError();
-
-        throw formatted_error("Could not open {} (error {}).", fn, le);
-    }
+    if (h == INVALID_HANDLE_VALUE)
+        throw last_error("CreateFile", GetLastError());
 
     if (drive) {
         if (!DeviceIoControl(h, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &ret, nullptr)) {
             auto le = GetLastError();
-
             CloseHandle(h);
-
-            throw formatted_error("Could not lock volume (error {}).", le);
+            throw last_error("FSCTL_LOCK_VOLUME", le);
         }
     }
 #else
@@ -99,7 +94,7 @@ superblock btrfs::read_superblock() {
     LARGE_INTEGER li;
 
     if (!GetFileSizeEx(h, &li))
-        throw formatted_error("GetFileSizeEx failed (error {}).", GetLastError());
+        throw last_error("GetFileSizeEx", GetLastError());
 
     device_size = li.QuadPart;
 #else
@@ -159,11 +154,8 @@ buffer_t btrfs::raw_read(uint64_t phys_addr, uint32_t len) {
 
     posli.QuadPart = phys_addr;
 
-    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN)) {
-        auto le = GetLastError();
-
-        throw formatted_error("SetFilePointerEx failed (error {}).", le);
-    }
+    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN))
+        throw last_error("SetFilePointerEx", GetLastError());
 #else
     f.seekg(phys_addr);
 
@@ -176,11 +168,8 @@ buffer_t btrfs::raw_read(uint64_t phys_addr, uint32_t len) {
 #ifdef _WIN32
     DWORD read;
 
-    if (!ReadFile(h, ret.data(), (DWORD)len, &read, nullptr)) {
-        auto le = GetLastError();
-
-        throw formatted_error("ReadFile failed (error {}).", le);
-    }
+    if (!ReadFile(h, ret.data(), (DWORD)len, &read, nullptr))
+        throw last_error("ReadFile", GetLastError());
 #else
     f.read((char*)ret.data(), ret.size());
 
@@ -197,11 +186,8 @@ void btrfs::raw_write(uint64_t phys_addr, const buffer_t& buf) {
 
     posli.QuadPart = phys_addr;
 
-    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN)) {
-        auto le = GetLastError();
-
-        throw formatted_error("SetFilePointerEx failed (error {}).", le);
-    }
+    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN))
+        throw last_error("SetFilePointerEx", GetLastError());
 #else
     f.seekg(phys_addr);
 
@@ -212,11 +198,8 @@ void btrfs::raw_write(uint64_t phys_addr, const buffer_t& buf) {
 #ifdef _WIN32
     DWORD written;
 
-    if (!WriteFile(h, buf.data(), (DWORD)buf.size(), &written, nullptr)) {
-        auto le = GetLastError();
-
-        throw formatted_error("WriteFile failed (error {}).", le);
-    }
+    if (!WriteFile(h, buf.data(), (DWORD)buf.size(), &written, nullptr))
+        throw last_error("WriteFile", GetLastError());
 #else
     f.write((char*)buf.data(), buf.size());
 

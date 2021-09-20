@@ -301,11 +301,8 @@ ntfs::ntfs(const string& fn) {
     h = CreateFileW((WCHAR*)namew.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
                     nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
-    if (h == INVALID_HANDLE_VALUE) {
-        auto le = GetLastError();
-
-        throw formatted_error("Could not open {} (error {}).", fn, le);
-    }
+    if (h == INVALID_HANDLE_VALUE)
+        throw last_error("CreateFile", GetLastError());
 
     if (drive) {
         if (!DeviceIoControl(h, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &ret, nullptr)) {
@@ -313,7 +310,7 @@ ntfs::ntfs(const string& fn) {
 
             CloseHandle(h);
 
-            throw formatted_error("Could not lock volume (error {}).", le);
+            throw last_error("FSCTL_LOCK_VOLUME", le);
         }
     }
 
@@ -756,11 +753,8 @@ void ntfs::seek(uint64_t pos) {
 
     posli.QuadPart = pos;
 
-    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN)) {
-        auto le = GetLastError();
-
-        throw formatted_error("SetFilePointerEx failed (error {}).", le);
-    }
+    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN))
+        throw last_error("SetFilePointerEx", GetLastError());
 #else
     if (lseek(fd, pos, SEEK_SET) == -1)
         throw formatted_error("Error seeking to {:x} (errno = {}).", pos, errno);
@@ -771,11 +765,8 @@ void ntfs::read(char* buf, size_t length) {
 #ifdef _WIN32
     DWORD read;
 
-    if (!ReadFile(h, buf, (DWORD)length, &read, nullptr)) {
-        auto le = GetLastError();
-
-        throw formatted_error("ReadFile failed (error {}).", le);
-    }
+    if (!ReadFile(h, buf, (DWORD)length, &read, nullptr))
+        throw last_error("ReadFile", GetLastError());
 #else
     auto pos = lseek(fd, 0, SEEK_CUR);
     auto orig_length = length;
@@ -799,11 +790,8 @@ void ntfs::write(const char* buf, size_t length) {
 #ifdef _WIN32
     DWORD written;
 
-    if (!WriteFile(h, buf, (DWORD)length, &written, nullptr)) {
-        auto le = GetLastError();
-
-        throw formatted_error("WriteFile failed (error {}).", le);
-    }
+    if (!WriteFile(h, buf, (DWORD)length, &written, nullptr))
+        throw last_error("WriteFile", GetLastError());
 #else
     auto pos = lseek(fd, 0, SEEK_CUR);
     auto orig_length = length;
