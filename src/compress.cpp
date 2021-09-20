@@ -132,7 +132,7 @@ optional<string> lzo_compress(const string_view& data, uint32_t cluster_size) {
     if (outbuf.length() > data.length() - cluster_size)
         return nullopt;
 
-    outbuf.resize((outbuf.length() + cluster_size - 1) & ~(cluster_size - 1), 0);
+    outbuf.resize((outbuf.length() + cluster_size - 1) & ~((uint64_t)cluster_size - 1), 0);
 
     return outbuf;
 }
