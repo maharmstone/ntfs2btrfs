@@ -30,6 +30,7 @@ private:
 
 #ifdef _WIN32
     unique_handle h;
+    bool drive = false;
 #else
     fstream f;
 #endif
@@ -40,7 +41,6 @@ private:
 
 btrfs::btrfs(const string& fn) {
 #ifdef _WIN32
-    bool drive = false;
     DWORD ret;
     wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
     u16string namew;
@@ -81,12 +81,22 @@ superblock btrfs::read_superblock() {
     // find length of volume
 
 #ifdef _WIN32
-    LARGE_INTEGER li;
+    if (drive) {
+        GET_LENGTH_INFORMATION gli;
+        DWORD ret;
 
-    if (!GetFileSizeEx(h.get(), &li))
-        throw last_error("GetFileSizeEx", GetLastError());
+        if (!DeviceIoControl(h.get(), IOCTL_DISK_GET_LENGTH_INFO, nullptr, 0, &gli, sizeof(gli), &ret, nullptr))
+            throw last_error("IOCTL_DISK_GET_LENGTH_INFO", GetLastError());
 
-    device_size = li.QuadPart;
+        device_size = gli.Length.QuadPart;
+    } else {
+        LARGE_INTEGER li;
+
+        if (!GetFileSizeEx(h.get(), &li))
+            throw last_error("GetFileSizeEx", GetLastError());
+
+        device_size = li.QuadPart;
+    }
 #else
     f.seekg(0, ios::end);
 
