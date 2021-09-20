@@ -321,7 +321,7 @@ ntfs::ntfs(const string& fn) {
     fd = open(fn.c_str(), O_RDWR | O_EXCL);
 
     if (fd < 0)
-        throw formatted_error("open returned {}.", fd);
+        throw formatted_error("open returned {} (errno = {}).", fd, errno);
 #endif
 
     // read NTFS_BOOT_SECTOR
