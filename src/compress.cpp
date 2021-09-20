@@ -150,7 +150,7 @@ optional<string> zstd_compress(const string_view& data, uint32_t cluster_size) {
         return nullopt;
 
     out.resize(ret);
-    out.resize((out.length() + cluster_size - 1) & ~(cluster_size - 1), 0);
+    out.resize((out.length() + cluster_size - 1) & ~((uint64_t)cluster_size - 1), 0);
 
     return out;
 }
