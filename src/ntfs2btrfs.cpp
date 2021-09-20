@@ -1865,7 +1865,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     list<mapping> mappings;
     wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
     vector<tuple<uint64_t, string>> links;
-    string standard_info, inline_data, sd, reparse_point, symlink;
+    buffer_t standard_info;
+    string inline_data, sd, reparse_point, symlink;
     uint32_t atts;
     bool atts_set = false;
     map<string, tuple<uint32_t, string>> xattrs;
@@ -1891,7 +1892,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
                     throw formatted_error("Error - STANDARD_INFORMATION is non-resident"); // FIXME - can this happen?
 
-                standard_info = res_data;
+                standard_info.resize(res_data.length());
+                memcpy(standard_info.data(), res_data.data(), res_data.length());
             break;
 
             case ntfs_attribute::DATA:
@@ -2246,7 +2248,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     memset(&ii, 0, sizeof(INODE_ITEM));
 
-    if (standard_info.length() >= offsetof(STANDARD_INFORMATION, MaximumVersions)) {
+    if (standard_info.size() >= offsetof(STANDARD_INFORMATION, MaximumVersions)) {
         auto si = reinterpret_cast<const STANDARD_INFORMATION*>(standard_info.data());
         uint32_t defda = 0;
 
@@ -2272,7 +2274,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             atts_set = true;
     }
 
-    if (standard_info.length() >= offsetof(STANDARD_INFORMATION, OwnerId)) {
+    if (standard_info.size() >= offsetof(STANDARD_INFORMATION, OwnerId)) {
         auto si = reinterpret_cast<const STANDARD_INFORMATION*>(standard_info.data());
 
         ii.otime = win_time_to_unix(si->CreationTime);
@@ -2281,7 +2283,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         ii.st_ctime = win_time_to_unix(si->ChangeTime);
     }
 
-    if (sd.empty() && standard_info.length() >= offsetof(STANDARD_INFORMATION, QuotaCharged)) {
+    if (sd.empty() && standard_info.size() >= offsetof(STANDARD_INFORMATION, QuotaCharged)) {
         auto si = reinterpret_cast<const STANDARD_INFORMATION*>(standard_info.data());
 
         sd = find_sd(si->SecurityId, secure, dev);
