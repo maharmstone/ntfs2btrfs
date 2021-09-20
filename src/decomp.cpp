@@ -215,9 +215,9 @@ string do_xpress_decompress(const string_view& compdata, uint32_t size, uint32_t
         uint32_t complen;
 
         if (i == 0)
-            complen = num_chunks > 1 ? offsets[0] : data.length();
+            complen = num_chunks > 1 ? offsets[0] : (uint32_t)data.length();
         else if (i == num_chunks - 1)
-            complen = data.length() - offsets[i - 1];
+            complen = (uint32_t)data.length() - offsets[i - 1];
         else
             complen = offsets[i] - offsets[i - 1];
 
