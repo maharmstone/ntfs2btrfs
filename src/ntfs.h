@@ -166,8 +166,8 @@ typedef struct {
     uint32_t ClassId;
     uint32_t OwnerId;
     uint32_t SecurityId;
-    uint32_t QuotaCharged;
-    uint32_t USN;
+    uint64_t QuotaCharged;
+    uint64_t USN;
 } STANDARD_INFORMATION;
 
 #define FILE_ATTRIBUTE_READONLY             0x00000001
