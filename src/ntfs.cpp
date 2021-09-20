@@ -386,8 +386,9 @@ static string read_from_mappings(const list<mapping>& mappings, uint64_t start, 
 }
 
 template<class T>
-static bool btree_search(index_root* ir, const list<mapping>& mappings, index_node_header* inh, ntfs& dev, T key, string& ret) {
-    auto ent = reinterpret_cast<const index_entry*>((uint8_t*)inh + inh->first_entry);
+static bool btree_search(const index_root& ir, const list<mapping>& mappings, const index_node_header& inh,
+                         ntfs& dev, T key, string& ret) {
+    auto ent = reinterpret_cast<const index_entry*>((uint8_t*)&inh + inh.first_entry);
 
     do {
         if (ent->flags & INDEX_ENTRY_SUBNODE) {
@@ -408,21 +409,21 @@ static bool btree_search(index_root* ir, const list<mapping>& mappings, index_no
             if (!skip) {
                 uint64_t vcn = ((MFT_SEGMENT_REFERENCE*)((uint8_t*)ent + ent->entry_length - sizeof(uint64_t)))->SegmentNumber;
 
-                if (ir->bytes_per_index_record < dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster)
+                if (ir.bytes_per_index_record < dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster)
                     vcn *= dev.boot_sector->BytesPerSector;
                 else
                     vcn *= (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
 
-                auto data = read_from_mappings(mappings, vcn, ir->bytes_per_index_record, dev);
+                auto data = read_from_mappings(mappings, vcn, ir.bytes_per_index_record, dev);
 
-                auto rec = reinterpret_cast<index_record*>(data.data());
+                auto& rec = *reinterpret_cast<index_record*>(data.data());
 
-                if (rec->MultiSectorHeader.Signature != INDEX_RECORD_MAGIC)
+                if (rec.MultiSectorHeader.Signature != INDEX_RECORD_MAGIC)
                     throw formatted_error("Index record magic was not INDX.");
 
-                process_fixups(&rec->MultiSectorHeader, ir->bytes_per_index_record, dev.boot_sector->BytesPerSector);
+                process_fixups(&rec.MultiSectorHeader, ir.bytes_per_index_record, dev.boot_sector->BytesPerSector);
 
-                return btree_search(ir, mappings, &rec->header, dev, key, ret);
+                return btree_search(ir, mappings, rec.header, dev, key, ret);
             }
         } else if (!(ent->flags & INDEX_ENTRY_LAST)) {
             T v = *(T*)((uint8_t*)ent + sizeof(index_entry));
@@ -451,18 +452,18 @@ string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev) {
     auto ir_str = secure.read(0, 0, ntfs_attribute::INDEX_ROOT, u"$SII");
     auto ia = secure.read_mappings(ntfs_attribute::INDEX_ALLOCATION, u"$SII");
 
-    auto ir = reinterpret_cast<index_root*>(ir_str.data());
+    const auto& ir = *reinterpret_cast<index_root*>(ir_str.data());
 
     string ret;
 
-    if (!btree_search(ir, ia, &ir->node_header, dev, id, ret))
+    if (!btree_search(ir, ia, ir.node_header, dev, id, ret))
         return "";
 
-    auto sde = reinterpret_cast<const sd_entry*>(ret.data());
+    const auto& sde = *reinterpret_cast<const sd_entry*>(ret.data());
 
-    auto sde2 = secure.read(sde->offset, sde->length, ntfs_attribute::DATA, u"$SDS");
+    auto sde2 = secure.read(sde.offset, sde.length, ntfs_attribute::DATA, u"$SDS");
 
-    if (memcmp(sde, sde2.data(), sizeof(sd_entry)))
+    if (memcmp(&sde, sde2.data(), sizeof(sd_entry)))
         throw formatted_error("SD headers do not match.");
 
     sd_list[id] = sde2.substr(sizeof(sd_entry));
