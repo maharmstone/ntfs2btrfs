@@ -470,29 +470,29 @@ string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev) {
     return sd_list.at(id);
 }
 
-static void walk_btree(index_root* ir, const list<mapping>& mappings, index_node_header* inh, ntfs& dev,
+static void walk_btree(const index_root& ir, const list<mapping>& mappings, const index_node_header& inh, ntfs& dev,
                        const function<void(const index_entry&, const string_view&)>& func, unsigned int level) {
-    auto ent = reinterpret_cast<const index_entry*>((uint8_t*)inh + inh->first_entry);
+    auto ent = reinterpret_cast<const index_entry*>((uint8_t*)&inh + inh.first_entry);
 
     do {
         if (ent->flags & INDEX_ENTRY_SUBNODE) {
             uint64_t vcn = ((MFT_SEGMENT_REFERENCE*)((uint8_t*)ent + ent->entry_length - sizeof(uint64_t)))->SegmentNumber;
 
-            if (ir->bytes_per_index_record < dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster)
+            if (ir.bytes_per_index_record < dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster)
                 vcn *= dev.boot_sector->BytesPerSector;
             else
                 vcn *= (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
 
-            auto data = read_from_mappings(mappings, vcn, ir->bytes_per_index_record, dev);
+            auto data = read_from_mappings(mappings, vcn, ir.bytes_per_index_record, dev);
 
             auto rec = reinterpret_cast<index_record*>(data.data());
 
             if (rec->MultiSectorHeader.Signature != INDEX_RECORD_MAGIC)
                 throw formatted_error("Index record magic was not INDX.");
 
-            process_fixups(&rec->MultiSectorHeader, ir->bytes_per_index_record, dev.boot_sector->BytesPerSector);
+            process_fixups(&rec->MultiSectorHeader, ir.bytes_per_index_record, dev.boot_sector->BytesPerSector);
 
-            walk_btree(ir, mappings, &rec->header, dev, func, level + 1);
+            walk_btree(ir, mappings, rec->header, dev, func, level + 1);
         } else
             func(*ent, string_view((const char*)ent + sizeof(index_entry), ent->stream_length));
 
@@ -512,11 +512,11 @@ void populate_skip_list(ntfs& dev, uint64_t inode, list<uint64_t>& skiplist) {
     auto ir_str = file.read(0, 0, ntfs_attribute::INDEX_ROOT, u"$I30");
     auto ia = file.read_mappings(ntfs_attribute::INDEX_ALLOCATION, u"$I30");
 
-    auto ir = reinterpret_cast<index_root*>(ir_str.data());
+    const auto& ir = *reinterpret_cast<index_root*>(ir_str.data());
 
     skiplist.emplace_back(inode);
 
-    walk_btree(ir, ia, &ir->node_header, dev, [&](const index_entry& ent, const string_view& data) {
+    walk_btree(ir, ia, ir.node_header, dev, [&](const index_entry& ent, const string_view& data) {
         if (data.empty())
             return;
 
