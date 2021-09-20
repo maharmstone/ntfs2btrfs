@@ -17,13 +17,6 @@ using chunks_t = map<uint64_t, buffer_t>;
 class btrfs {
 public:
     btrfs(const string& fn);
-
-#ifdef _WIN32
-    ~btrfs() {
-        CloseHandle(h);
-    }
-#endif
-
     uint64_t find_root_addr(uint64_t root);
     bool walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func);
     const pair<const uint64_t, buffer_t>& find_chunk(uint64_t addr);
@@ -36,7 +29,7 @@ private:
     buffer_t read(uint64_t addr, uint32_t len);
 
 #ifdef _WIN32
-    HANDLE h;
+    unique_handle h;
 #else
     fstream f;
 #endif
@@ -59,18 +52,15 @@ btrfs::btrfs(const string& fn) {
     } else
         namew = convert.from_bytes(fn.data(), fn.data() + fn.length());
 
-    h = CreateFileW((WCHAR*)namew.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    h.reset(CreateFileW((WCHAR*)namew.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
 
-    if (h == INVALID_HANDLE_VALUE)
+    if (h.get() == INVALID_HANDLE_VALUE)
         throw last_error("CreateFile", GetLastError());
 
     if (drive) {
-        if (!DeviceIoControl(h, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &ret, nullptr)) {
-            auto le = GetLastError();
-            CloseHandle(h);
-            throw last_error("FSCTL_LOCK_VOLUME", le);
-        }
+        if (!DeviceIoControl(h.get(), FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &ret, nullptr))
+            throw last_error("FSCTL_LOCK_VOLUME", GetLastError());
     }
 #else
     f = fstream(fn, ios_base::in | ios_base::out | ios::binary);
@@ -93,7 +83,7 @@ superblock btrfs::read_superblock() {
 #ifdef _WIN32
     LARGE_INTEGER li;
 
-    if (!GetFileSizeEx(h, &li))
+    if (!GetFileSizeEx(h.get(), &li))
         throw last_error("GetFileSizeEx", GetLastError());
 
     device_size = li.QuadPart;
@@ -154,7 +144,7 @@ buffer_t btrfs::raw_read(uint64_t phys_addr, uint32_t len) {
 
     posli.QuadPart = phys_addr;
 
-    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN))
+    if (!SetFilePointerEx(h.get(), posli, nullptr, FILE_BEGIN))
         throw last_error("SetFilePointerEx", GetLastError());
 #else
     f.seekg(phys_addr);
@@ -168,7 +158,7 @@ buffer_t btrfs::raw_read(uint64_t phys_addr, uint32_t len) {
 #ifdef _WIN32
     DWORD read;
 
-    if (!ReadFile(h, ret.data(), (DWORD)len, &read, nullptr))
+    if (!ReadFile(h.get(), ret.data(), (DWORD)len, &read, nullptr))
         throw last_error("ReadFile", GetLastError());
 #else
     f.read((char*)ret.data(), ret.size());
@@ -186,7 +176,7 @@ void btrfs::raw_write(uint64_t phys_addr, const buffer_t& buf) {
 
     posli.QuadPart = phys_addr;
 
-    if (!SetFilePointerEx(h, posli, nullptr, FILE_BEGIN))
+    if (!SetFilePointerEx(h.get(), posli, nullptr, FILE_BEGIN))
         throw last_error("SetFilePointerEx", GetLastError());
 #else
     f.seekg(phys_addr);
@@ -198,7 +188,7 @@ void btrfs::raw_write(uint64_t phys_addr, const buffer_t& buf) {
 #ifdef _WIN32
     DWORD written;
 
-    if (!WriteFile(h, buf.data(), (DWORD)buf.size(), &written, nullptr))
+    if (!WriteFile(h.get(), buf.data(), (DWORD)buf.size(), &written, nullptr))
         throw last_error("WriteFile", GetLastError());
 #else
     f.write((char*)buf.data(), buf.size());

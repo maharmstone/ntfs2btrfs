@@ -80,6 +80,20 @@ public:
 private:
     std::string msg;
 };
+
+class handle_closer {
+public:
+    typedef HANDLE pointer;
+
+    void operator()(HANDLE h) {
+        if (h == INVALID_HANDLE_VALUE)
+            return;
+
+        CloseHandle(h);
+    }
+};
+
+typedef std::unique_ptr<HANDLE, handle_closer> unique_handle;
 #endif
 
 class formatted_error : public std::exception {
