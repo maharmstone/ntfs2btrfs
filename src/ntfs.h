@@ -300,7 +300,10 @@ typedef struct {
 #endif
 
 #define IO_REPARSE_TAG_LX_SYMLINK   0xa000001d
+
+#ifndef IO_REPARSE_TAG_WOF
 #define IO_REPARSE_TAG_WOF          0x80000017
+#endif
 
 #ifndef SYMLINK_FLAG_RELATIVE
 #define SYMLINK_FLAG_RELATIVE       0x00000001
