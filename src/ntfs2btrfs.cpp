@@ -137,13 +137,13 @@ static void remove_superblocks(chunk& c) {
     }
 }
 
-static void create_data_chunks(ntfs& dev, const string& bmpdata) {
+static void create_data_chunks(ntfs& dev, const buffer_t& bmpdata) {
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
     uint64_t addr = 0;
 
     // FIXME - make sure clusters_per_chunk is multiple of 8
 
-    string_view bdsv = bmpdata;
+    string_view bdsv{(char*)bmpdata.data(), bmpdata.size()};
 
     while (bdsv.length() > 0 && addr < device_size) {
         uint64_t chunk_length = min(device_size - addr, data_chunk_size);
@@ -755,7 +755,7 @@ static void set_volume_label(superblock& sb, ntfs& dev) {
 
         wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
 
-        auto vn = convert.to_bytes((char16_t*)vnw.data(), (char16_t*)&vnw[vnw.length()]);
+        auto vn = convert.to_bytes((char16_t*)vnw.data(), (char16_t*)&vnw[vnw.size()]);
 
         if (vn.length() > MAX_LABEL_SIZE) {
             vn = vn.substr(0, MAX_LABEL_SIZE);
@@ -1263,10 +1263,10 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
 }
 
 template<typename T>
-static void parse_bitmap(const string& bmpdata, list<T>& runs) {
+static void parse_bitmap(const buffer_t& bmpdata, list<T>& runs) {
     uint64_t run_start = 0, pos = 0;
     bool set = false;
-    string_view bdsv = bmpdata;
+    string_view bdsv{(char*)bmpdata.data(), bmpdata.size()};
 
     // FIXME - by 64-bits if 64-bit processor (use typedef for uint64_t/uint32_t?)
 
@@ -1362,10 +1362,10 @@ static void parse_bitmap(const string& bmpdata, list<T>& runs) {
     // FIXME - remove any bits after end of volume
 }
 
-static void parse_data_bitmap(ntfs& dev, const string& bmpdata, runs_t& runs) {
+static void parse_data_bitmap(ntfs& dev, const buffer_t& bmpdata, runs_t& runs) {
     uint64_t run_start = 0, pos = 0;
     bool set = false;
-    string_view bdsv = bmpdata;
+    string_view bdsv{(char*)bmpdata.data(), bmpdata.size()};
 
     uint64_t clusters_per_chunk = data_chunk_size / ((uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster);
 
@@ -2684,7 +2684,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     }
 }
 
-static void create_inodes(root& r, const string& mftbmp, ntfs& dev, runs_t& runs, ntfs_file& secure,
+static void create_inodes(root& r, const buffer_t& mftbmp, ntfs& dev, runs_t& runs, ntfs_file& secure,
                           enum btrfs_compression compression) {
     list<space> inodes;
     list<uint64_t> skiplist;

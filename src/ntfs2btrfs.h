@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "ntfs.h"
 #include "btrfs.h"
 #include "config.h"
 #include <string.h>
@@ -184,6 +183,8 @@ static bool inline operator<(const KEY& a, const KEY& b) {
     return false;
 }
 
+class ntfs;
+
 class root {
 public:
     root(uint64_t id) : id(id) { }
@@ -310,13 +311,6 @@ static inline uint64_t sector_align(uint64_t v, uint64_t s) {
 
 static const uint64_t image_subvol_id = 0x100;
 static const char image_filename[] = "ntfs.img";
-
-// ntfs.cpp
-void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, std::list<mapping>& mappings,
-                               uint32_t cluster_size, uint64_t vdl);
-std::string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev);
-void populate_skip_list(ntfs& dev, uint64_t inode, std::list<uint64_t>& skiplist);
-void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size);
 
 // decomp.cpp
 std::string lznt1_decompress(std::string_view compdata, uint32_t size);

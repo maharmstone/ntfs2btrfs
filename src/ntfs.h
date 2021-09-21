@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "ntfs2btrfs.h"
 #include <stdint.h>
 #include <vector>
 #include <string>
@@ -86,7 +87,7 @@ enum class ntfs_attribute : uint32_t {
     PROPERTY_SET = 0xF0,
 };
 
-typedef struct {
+typedef struct _ATTRIBUTE_RECORD_HEADER {
     enum ntfs_attribute TypeCode;
     uint16_t RecordLength;
     uint16_t Unknown;
@@ -383,7 +384,7 @@ struct mapping {
 class ntfs_file {
 public:
     ntfs_file(ntfs& dev, uint64_t inode);
-    std::string read(uint64_t offset = 0, uint32_t length = 0, enum ntfs_attribute type = ntfs_attribute::DATA, const std::u16string_view& name = u"");
+    buffer_t read(uint64_t offset = 0, uint32_t length = 0, enum ntfs_attribute type = ntfs_attribute::DATA, const std::u16string_view& name = u"");
     std::list<mapping> read_mappings(enum ntfs_attribute type = ntfs_attribute::DATA, const std::u16string_view& name = u"");
 
     bool is_directory() const {
@@ -396,7 +397,7 @@ public:
     FILE_RECORD_SEGMENT_HEADER* file_record;
 
 private:
-    std::string read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att);
+    buffer_t read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att);
 
     std::vector<char> file_record_buf;
     ntfs& dev;
@@ -433,3 +434,10 @@ public:
     int fd;
 #endif
 };
+
+// ntfs.cpp
+void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, std::list<mapping>& mappings,
+                               uint32_t cluster_size, uint64_t vdl);
+std::string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev);
+void populate_skip_list(ntfs& dev, uint64_t inode, std::list<uint64_t>& skiplist);
+void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size);

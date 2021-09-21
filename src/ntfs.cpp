@@ -18,6 +18,7 @@
 #define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 
 #include "ntfs2btrfs.h"
+#include "ntfs.h"
 #include <functional>
 #include <locale>
 #include <codecvt>
@@ -149,22 +150,21 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>
     }
 }
 
-string ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att) {
+buffer_t ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att) {
     list<mapping> mappings;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-    string ret;
 
     read_nonresident_mappings(att, mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
 
     // FIXME - do we need to check that mappings is contiguous and in order?
 
     if (offset >= (uint64_t)att->Form.Nonresident.FileSize)
-        return "";
+        return {};
 
     if (offset + length > (uint64_t)att->Form.Nonresident.FileSize || length == 0)
         length = (uint32_t)(att->Form.Nonresident.FileSize - offset);
 
-    ret.resize(length);
+    buffer_t ret(length);
     memset(ret.data(), 0, length);
 
     for (const auto& m : mappings) {
@@ -205,15 +205,13 @@ string ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length, c
             dev.seek(read_start);
 
             if (skip_start != 0 || skip_end != 0) {
-                string tmp;
+                buffer_t tmp(read_end - read_start);
 
-                tmp.resize((uint32_t)(read_end - read_start));
-
-                dev.read(tmp.data(), (uint32_t)(read_end - read_start));
+                dev.read((char*)tmp.data(), tmp.size());
 
                 memcpy(&ret[buf_start], &tmp[skip_start], buf_end - buf_start);
             } else
-                dev.read(&ret[buf_start], buf_end - buf_start);
+                dev.read((char*)&ret[buf_start], buf_end - buf_start);
         }
     }
 
@@ -222,8 +220,8 @@ string ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length, c
     return ret;
 }
 
-string ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute type, const u16string_view& name) {
-    string ret;
+buffer_t ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute type, const u16string_view& name) {
+    buffer_t ret;
     bool found = false;
 
     loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER* att, const string_view& res_data, const u16string_view& att_name) -> bool {
@@ -240,7 +238,7 @@ string ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute typ
             ret = read_nonresident_attribute(offset, length, att);
         else {
             if (offset >= res_data.length())
-                ret = "";
+                ret.clear();
             else {
                 if (offset + length > res_data.length() || length == 0)
                     length = (uint32_t)(res_data.length() - offset);
@@ -466,7 +464,7 @@ string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev) {
     if (memcmp(&sde, sde2.data(), sizeof(sd_entry)))
         throw formatted_error("SD headers do not match.");
 
-    sd_list[id] = sde2.substr(sizeof(sd_entry));
+    sd_list[id] = string_view((char*)sde2.data(), sde2.size()).substr(sizeof(sd_entry));
 
     return sd_list.at(id);
 }
@@ -543,7 +541,7 @@ void populate_skip_list(ntfs& dev, uint64_t inode, list<uint64_t>& skiplist) {
 void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEADER*, const string_view&, const u16string_view&)>& func) {
     auto att = reinterpret_cast<const ATTRIBUTE_RECORD_HEADER*>((uint8_t*)file_record + file_record->FirstAttributeOffset);
     size_t offset = file_record->FirstAttributeOffset;
-    string attlist;
+    buffer_t attlist;
 
     while (true) {
         if (att->TypeCode == (enum ntfs_attribute)0xffffffff || att->RecordLength == 0)
@@ -570,7 +568,7 @@ void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEA
 
         {
             auto ent = (const attribute_list_entry*)attlist.data();
-            size_t left = attlist.length();
+            size_t left = attlist.size();
 
             while (true) {
                 uint64_t file_reference = ent->file_reference.SegmentNumber;
@@ -631,7 +629,7 @@ void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEA
                 ntfs_file oth(dev, file_reference);
 
                 auto ent = (const attribute_list_entry*)attlist.data();
-                size_t left = attlist.length();
+                auto left = attlist.size();
 
                 while (true) {
                     if (ent->file_reference.SegmentNumber == file_reference) {
