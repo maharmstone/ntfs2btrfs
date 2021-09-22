@@ -2177,7 +2177,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         return; // don't create orphaned inodes
 
     if (compression_unit != 0) {
-        uint64_t cus = 1 << (uint64_t)compression_unit;
+        uint64_t cus = 1ull << compression_unit;
         buffer_t compdata((size_t)(cus * cluster_size));
 
         try {
