@@ -417,12 +417,12 @@ public:
     }
 
     void seek(uint64_t pos);
-    void read(char* buf, size_t length);
+    void read(uint8_t* buf, size_t length);
     void write(const uint8_t* buf, size_t length);
     std::string_view find_sd(uint32_t id, ntfs_file& secure);
 
     std::unique_ptr<ntfs_file> mft;
-    std::vector<char> boot_sector_buf;
+    buffer_t boot_sector_buf;
     NTFS_BOOT_SECTOR* boot_sector;
     uint64_t file_record_size;
     std::map<uint32_t, buffer_t> sd_list;

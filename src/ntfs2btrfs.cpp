@@ -2016,7 +2016,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         for (const auto& m : ads_mappings) {
                             dev.seek(m.lcn * cluster_size);
-                            dev.read((char*)ads_data.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
+                            dev.read(ads_data.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
                         }
 
                         ads_data.resize((size_t)att->Form.Nonresident.FileSize);
@@ -2150,7 +2150,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                     for (const auto& m : sd_mappings) {
                         dev.seek(m.lcn * cluster_size);
-                        dev.read((char*)sd.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
+                        dev.read(sd.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
                     }
 
                     sd.resize((size_t)att->Form.Nonresident.FileSize);
@@ -2207,7 +2207,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         compressed = true;
                     } else {
                         dev.seek(m.lcn * cluster_size);
-                        dev.read((char*)compdata.data() + (clusters * cluster_size), (size_t)(l * cluster_size));
+                        dev.read(compdata.data() + (clusters * cluster_size), (size_t)(l * cluster_size));
 
                         if (l < m.length) {
                             m.lcn += l;
@@ -2463,7 +2463,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 buffer_t sector(sector_size);
 
                 dev.seek((mappings.back().lcn + mappings.back().length - 1) * cluster_size);
-                dev.read((char*)sector.data(), sector.size());
+                dev.read(sector.data(), sector.size());
 
                 memset(sector.data() + (vdl % sector_size), 0, sector_size - (vdl % sector_size));
 
@@ -2938,7 +2938,7 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
         buffer_t data((size_t)(r.length * cluster_size));
 
         dev.seek(r.offset * cluster_size);
-        dev.read((char*)data.data(), data.size());
+        dev.read(data.data(), data.size());
 
         auto sv = string_view((char*)data.data(), data.size());
 #endif
@@ -3034,7 +3034,7 @@ static void protect_cluster(ntfs& dev, runs_t& runs, uint64_t cluster) {
         data.resize((size_t)cluster_size);
 
     dev.seek(cluster * cluster_size);
-    dev.read((char*)data.data(), data.size());
+    dev.read(data.data(), data.size());
 
     dev.seek(addr);
     dev.write(data.data(), data.size());

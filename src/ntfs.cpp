@@ -64,7 +64,7 @@ ntfs_file::ntfs_file(ntfs& dev, uint64_t inode) : dev(dev), inode(inode) {
 
     if (inode == 0) {
         dev.seek(dev.boot_sector->MFT * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster);
-        dev.read((char*)file_record_buf.data(), (uint32_t)dev.file_record_size);
+        dev.read(file_record_buf.data(), (uint32_t)dev.file_record_size);
     } else { // read from MFT
         auto str = dev.mft->read(inode * dev.file_record_size, (uint32_t)dev.file_record_size);
 
@@ -205,11 +205,11 @@ buffer_t ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length,
             if (skip_start != 0 || skip_end != 0) {
                 buffer_t tmp(read_end - read_start);
 
-                dev.read((char*)tmp.data(), tmp.size());
+                dev.read(tmp.data(), tmp.size());
 
                 memcpy(&ret[buf_start], &tmp[skip_start], buf_end - buf_start);
             } else
-                dev.read((char*)&ret[buf_start], buf_end - buf_start);
+                dev.read(&ret[buf_start], buf_end - buf_start);
         }
     }
 
@@ -365,7 +365,7 @@ static buffer_t read_from_mappings(const list<mapping>& mappings, uint64_t start
             buffer_t buf((uint32_t)(read_end - read_start));
 
             dev.seek(read_start + ((m.lcn - m.vcn) * cluster_size));
-            dev.read((char*)buf.data(), (uint32_t)(read_end - read_start));
+            dev.read(buf.data(), (uint32_t)(read_end - read_start));
 
             memcpy(s.data(), buf.data() + read_start - start, (size_t)min(read_end - read_start, length - read_start + start));
         }
@@ -752,7 +752,7 @@ void ntfs::seek(uint64_t pos) {
 #endif
 }
 
-void ntfs::read(char* buf, size_t length) {
+void ntfs::read(uint8_t* buf, size_t length) {
 #ifdef _WIN32
     DWORD read;
 
