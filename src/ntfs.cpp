@@ -374,8 +374,8 @@ static buffer_t read_from_mappings(const list<mapping>& mappings, uint64_t start
     return s;
 }
 
-static bool btree_search(const index_root& ir, const list<mapping>& mappings, const index_node_header& inh,
-                         ntfs& dev, uint32_t key, string& ret) {
+static optional<string> btree_search(const index_root& ir, const list<mapping>& mappings, const index_node_header& inh,
+                                     ntfs& dev, uint32_t key) {
     auto ent = reinterpret_cast<const index_entry*>((uint8_t*)&inh + inh.first_entry);
 
     do {
@@ -385,11 +385,8 @@ static bool btree_search(const index_root& ir, const list<mapping>& mappings, co
             if (!(ent->flags & INDEX_ENTRY_LAST)) {
                 uint32_t v1 = *(uint32_t*)((uint8_t*)ent + sizeof(index_entry));
 
-                if (v1 == key) {
-                    ret = string((char*)ent + sizeof(index_entry) + ent->stream_length, ent->entry_length - sizeof(index_entry) - ent->stream_length - sizeof(uint64_t));
-
-                    return true;
-                }
+                if (v1 == key)
+                    return string((char*)ent + sizeof(index_entry) + ent->stream_length, ent->entry_length - sizeof(index_entry) - ent->stream_length - sizeof(uint64_t));
 
                 skip = key > v1;
             }
@@ -411,16 +408,14 @@ static bool btree_search(const index_root& ir, const list<mapping>& mappings, co
 
                 process_fixups(&rec.MultiSectorHeader, ir.bytes_per_index_record, dev.boot_sector->BytesPerSector);
 
-                return btree_search(ir, mappings, rec.header, dev, key, ret);
+                return btree_search(ir, mappings, rec.header, dev, key);
             }
         } else if (!(ent->flags & INDEX_ENTRY_LAST)) {
             uint32_t v = *(uint32_t*)((uint8_t*)ent + sizeof(index_entry));
 
-            if (v == key) {
-                ret = string((char*)ent + sizeof(index_entry) + ent->stream_length, ent->entry_length - sizeof(index_entry) - ent->stream_length);
-
-                return true;
-            } else if (v > key)
+            if (v == key)
+                return string((char*)ent + sizeof(index_entry) + ent->stream_length, ent->entry_length - sizeof(index_entry) - ent->stream_length);
+            else if (v > key)
                 break;
         }
 
@@ -430,7 +425,7 @@ static bool btree_search(const index_root& ir, const list<mapping>& mappings, co
         ent = reinterpret_cast<const index_entry*>((uint8_t*)ent + ent->entry_length);
     } while (true);
 
-    return false;
+    return nullopt;
 }
 
 string_view ntfs::find_sd(uint32_t id, ntfs_file& secure) {
@@ -444,12 +439,12 @@ string_view ntfs::find_sd(uint32_t id, ntfs_file& secure) {
 
     const auto& ir = *reinterpret_cast<index_root*>(ir_str.data());
 
-    string ret;
+    auto ret = btree_search(ir, ia, ir.node_header, *this, id);
 
-    if (!btree_search(ir, ia, ir.node_header, *this, id, ret))
+    if (!ret.has_value())
         return "";
 
-    const auto& sde = *reinterpret_cast<const sd_entry*>(ret.data());
+    const auto& sde = *reinterpret_cast<const sd_entry*>(ret.value().data());
 
     auto sde2 = secure.read(sde.offset, sde.length, ntfs_attribute::DATA, u"$SDS");
 
