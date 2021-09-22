@@ -88,11 +88,10 @@ static string lznt1_decompress_chunk(string_view data) {
     return s;
 }
 
-string lznt1_decompress(string_view compdata, uint32_t size) {
-    string ret;
-    char* ptr;
+buffer_t lznt1_decompress(string_view compdata, uint32_t size) {
+    buffer_t ret(size);
+    uint8_t* ptr;
 
-    ret.resize(size);
     memset(ret.data(), 0, ret.size());
 
     ptr = ret.data();
@@ -148,7 +147,7 @@ string lznt1_decompress(string_view compdata, uint32_t size) {
     return ret;
 }
 
-string do_lzx_decompress(const string_view& compdata, uint32_t size) {
+buffer_t do_lzx_decompress(const string_view& compdata, uint32_t size) {
     auto ctx = lzx_allocate_decompressor(LZX_CHUNK_SIZE);
 
     if (!ctx)
@@ -157,9 +156,7 @@ string do_lzx_decompress(const string_view& compdata, uint32_t size) {
     uint64_t num_chunks = (size + LZX_CHUNK_SIZE - 1) / LZX_CHUNK_SIZE;
     auto offsets = (uint32_t*)compdata.data();
 
-    string ret;
-
-    ret.resize(size);
+    buffer_t ret(size);
 
     auto data = string_view(compdata.data() + ((num_chunks - 1) * sizeof(uint32_t)),
                             (uint32_t)(compdata.length() - ((num_chunks - 1) * sizeof(uint32_t))));
@@ -175,12 +172,12 @@ string do_lzx_decompress(const string_view& compdata, uint32_t size) {
         else
             complen = offsets[i] - offsets[i - 1];
 
-        if (complen == (i == num_chunks - 1 ? (ret.length() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE)) {
+        if (complen == (i == num_chunks - 1 ? (ret.size() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE)) {
             // stored uncompressed
             memcpy(ret.data() + (i * LZX_CHUNK_SIZE), data.data() + off, complen);
         } else {
             auto err = lzx_decompress(ctx, data.data() + off, complen, ret.data() + (i * LZX_CHUNK_SIZE),
-                                      (uint32_t)(i == num_chunks - 1 ? (ret.length() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE));
+                                      (uint32_t)(i == num_chunks - 1 ? (ret.size() - (i * LZX_CHUNK_SIZE)) : LZX_CHUNK_SIZE));
 
             if (err != 0) {
                 lzx_free_decompressor(ctx);
@@ -194,7 +191,7 @@ string do_lzx_decompress(const string_view& compdata, uint32_t size) {
     return ret;
 }
 
-string do_xpress_decompress(const string_view& compdata, uint32_t size, uint32_t chunk_size) {
+buffer_t do_xpress_decompress(const string_view& compdata, uint32_t size, uint32_t chunk_size) {
     auto ctx = xpress_allocate_decompressor();
 
     if (!ctx)
@@ -203,9 +200,7 @@ string do_xpress_decompress(const string_view& compdata, uint32_t size, uint32_t
     uint64_t num_chunks = (size + chunk_size - 1) / chunk_size;
     auto offsets = (uint32_t*)compdata.data();
 
-    string ret;
-
-    ret.resize(size);
+    buffer_t ret(size);
 
     auto data = string_view(compdata.data() + ((num_chunks - 1) * sizeof(uint32_t)),
                             (uint32_t)(compdata.length() - ((num_chunks - 1) * sizeof(uint32_t))));
@@ -221,12 +216,12 @@ string do_xpress_decompress(const string_view& compdata, uint32_t size, uint32_t
         else
             complen = offsets[i] - offsets[i - 1];
 
-        if (complen == (i == num_chunks - 1 ? (ret.length() - (i * chunk_size)) : chunk_size)) {
+        if (complen == (i == num_chunks - 1 ? (ret.size() - (i * chunk_size)) : chunk_size)) {
             // stored uncompressed
             memcpy(ret.data() + (i * chunk_size), data.data() + off, complen);
         } else {
             auto err = xpress_decompress(ctx, data.data() + off, complen, ret.data() + (i * chunk_size),
-                                         (size_t)(i == num_chunks - 1 ? (ret.length() - (i * chunk_size)) : chunk_size));
+                                         (size_t)(i == num_chunks - 1 ? (ret.size() - (i * chunk_size)) : chunk_size));
 
             if (err != 0) {
                 xpress_free_decompressor(ctx);

@@ -317,9 +317,9 @@ static const uint64_t image_subvol_id = 0x100;
 static const char image_filename[] = "ntfs.img";
 
 // decomp.cpp
-std::string lznt1_decompress(std::string_view compdata, uint32_t size);
-std::string do_lzx_decompress(const std::string_view& compdata, uint32_t size);
-std::string do_xpress_decompress(const std::string_view& compdata, uint32_t size, uint32_t chunk_size);
+buffer_t lznt1_decompress(std::string_view compdata, uint32_t size);
+buffer_t do_lzx_decompress(const std::string_view& compdata, uint32_t size);
+buffer_t do_xpress_decompress(const std::string_view& compdata, uint32_t size, uint32_t chunk_size);
 
 // compress.cpp
 #ifdef WITH_ZLIB

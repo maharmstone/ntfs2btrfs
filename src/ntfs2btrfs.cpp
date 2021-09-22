@@ -1792,7 +1792,7 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
     }
 }
 
-static void set_xattr(root& r, uint64_t inode, const string_view& name, uint32_t hash, const string_view& data) {
+static void set_xattr(root& r, uint64_t inode, const string_view& name, uint32_t hash, const buffer_t& data) {
     buffer_t buf(offsetof(DIR_ITEM, name[0]) + name.size() + data.size());
     auto& di = *(DIR_ITEM*)buf.data();
 
@@ -1864,12 +1864,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     list<mapping> mappings;
     wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
     vector<tuple<uint64_t, string>> links;
-    buffer_t standard_info;
-    string inline_data, sd, reparse_point, symlink;
+    buffer_t standard_info, sd, reparse_point, inline_data;
+    string symlink;
     uint32_t atts;
     bool atts_set = false;
-    map<string, tuple<uint32_t, string>> xattrs;
-    string filename, wof_compressed_data;
+    map<string, tuple<uint32_t, buffer_t>> xattrs;
+    string filename;
+    buffer_t wof_compressed_data;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     bool processed_data = false;
     uint16_t compression_unit = 0;
@@ -1910,7 +1911,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM && !processed_data) {
                         file_size = vdl = att->Form.Resident.ValueLength;
 
-                        inline_data = res_data;
+                        inline_data.resize(res_data.size());
+                        memcpy(inline_data.data(), res_data.data(), res_data.size());
                     } else {
                         if (!processed_data) {
                             file_size = att->Form.Nonresident.FileSize;
@@ -1973,9 +1975,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), (uint32_t)name2.length());
 
                     if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
-                        if (ads_name == "WofCompressedData")
-                            wof_compressed_data = res_data;
-                        else {
+                        if (ads_name == "WofCompressedData") {
+                            wof_compressed_data.resize(res_data.length());
+                            memcpy(wof_compressed_data.data(), res_data.data(), res_data.length());
+                        } else {
                             if (att->Form.Resident.ValueLength > max_xattr_size) {
                                 clear_line();
 
@@ -1987,7 +1990,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                 break;
                             }
 
-                            xattrs.emplace(name2, make_pair(hash, res_data));
+                            buffer_t buf(res_data.size());
+                            memcpy(buf.data(), res_data.data(), res_data.size());
+
+                            xattrs.emplace(name2, make_pair(hash, buf));
                         }
                     } else {
                         if (att->Form.Nonresident.FileSize > max_xattr_size && ads_name != "WofCompressedData") {
@@ -2002,22 +2008,21 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         }
 
                         list<mapping> ads_mappings;
-                        string ads_data;
 
                         read_nonresident_mappings(att, ads_mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
 
-                        ads_data.resize((size_t)sector_align(att->Form.Nonresident.FileSize, cluster_size));
-                        memset(ads_data.data(), 0, ads_data.length());
+                        buffer_t ads_data((size_t)sector_align(att->Form.Nonresident.FileSize, cluster_size));
+                        memset(ads_data.data(), 0, ads_data.size());
 
                         for (const auto& m : ads_mappings) {
                             dev.seek(m.lcn * cluster_size);
-                            dev.read(ads_data.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
+                            dev.read((char*)ads_data.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
                         }
 
                         ads_data.resize((size_t)att->Form.Nonresident.FileSize);
 
                         if (ads_name == "WofCompressedData")
-                            wof_compressed_data = ads_data;
+                            wof_compressed_data.swap(ads_data);
                         else
                             xattrs.emplace(name2, make_pair(hash, ads_data));
                     }
@@ -2072,7 +2077,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
                     throw formatted_error("Error - SYMBOLIC_LINK is non-resident"); // FIXME - can this happen?
 
-                reparse_point = res_data;
+                reparse_point.resize(res_data.size());
+                memcpy(reparse_point.data(), res_data.data(), res_data.size());
+
                 symlink.clear();
 
                 if (!is_dir && reparse_point.size() > offsetof(REPARSE_DATA_BUFFER, SymbolicLinkReparseBuffer.PathBuffer)) {
@@ -2099,7 +2106,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                     c = '/';
                             }
 
-                            reparse_point = "";
+                            reparse_point.clear();
                         }
                     }
                 }
@@ -2120,7 +2127,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         break;
                     }
 
-                    sd = res_data;
+                    sd.resize(res_data.size());
+                    memcpy(sd.data(), res_data.data(), res_data.size());
                 } else {
                     if (att->Form.Nonresident.FileSize > max_sd_size) {
                         clear_line();
@@ -2138,11 +2146,11 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     read_nonresident_mappings(att, sd_mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
 
                     sd.resize((size_t)sector_align(att->Form.Nonresident.FileSize, cluster_size));
-                    memset(sd.data(), 0, sd.length());
+                    memset(sd.data(), 0, sd.size());
 
                     for (const auto& m : sd_mappings) {
                         dev.seek(m.lcn * cluster_size);
-                        dev.read(sd.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
+                        dev.read((char*)sd.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
                     }
 
                     sd.resize((size_t)att->Form.Nonresident.FileSize);
@@ -2169,10 +2177,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         return; // don't create orphaned inodes
 
     if (compression_unit != 0) {
-        string compdata;
         uint64_t cus = 1 << (uint64_t)compression_unit;
-
-        compdata.resize((size_t)(cus * cluster_size));
+        buffer_t compdata((size_t)(cus * cluster_size));
 
         try {
             while (!mappings.empty()) {
@@ -2201,7 +2207,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         compressed = true;
                     } else {
                         dev.seek(m.lcn * cluster_size);
-                        dev.read(compdata.data() + (clusters * cluster_size), (size_t)(l * cluster_size));
+                        dev.read((char*)compdata.data() + (clusters * cluster_size), (size_t)(l * cluster_size));
 
                         if (l < m.length) {
                             m.lcn += l;
@@ -2218,17 +2224,18 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     if (filename.empty())
                         filename = f.get_filename();
 
-                    inline_data += compdata;
+                    inline_data.insert(inline_data.end(), compdata.begin(), compdata.end());
                 } else {
-                    compsize = compdata.length();
+                    compsize = compdata.size();
 
-                    if (file_size - inline_data.length() < compsize)
-                        compsize = file_size - inline_data.length();
+                    if (file_size - inline_data.size() < compsize)
+                        compsize = file_size - inline_data.size();
 
-                    inline_data += lznt1_decompress(compdata, (uint32_t)compsize);
+                    auto decomp = lznt1_decompress(string_view((char*)compdata.data(), compdata.size()), (uint32_t)compsize);
+                    inline_data.insert(inline_data.end(), decomp.begin(), decomp.end());
                 }
 
-                if (inline_data.length() >= file_size) {
+                if (inline_data.size() >= file_size) {
                     inline_data.resize((size_t)file_size);
                     mappings.clear();
                     break;
@@ -2283,30 +2290,33 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     }
 
     if (sd.empty() && standard_info.size() >= offsetof(STANDARD_INFORMATION, QuotaCharged)) {
-        sd = dev.find_sd(si.SecurityId, secure);
+        auto sv = dev.find_sd(si.SecurityId, secure);
 
-        if (sd.empty()) {
+        if (sv.empty()) {
             clear_line();
 
             if (filename.empty())
                 filename = f.get_filename();
 
             fmt::print(stderr, "Could not find SecurityId {} ({})\n", si.SecurityId, filename);
+        } else {
+            sd.resize(sv.size());
+            memcpy(sd.data(), sv.data(), sv.size());
         }
     }
 
-    if (reparse_point.length() > sizeof(uint32_t) && *(uint32_t*)reparse_point.data() == IO_REPARSE_TAG_WOF) {
+    if (reparse_point.size() > sizeof(uint32_t) && *(uint32_t*)reparse_point.data() == IO_REPARSE_TAG_WOF) {
         try {
-            if (reparse_point.length() < offsetof(reparse_point_header, DataBuffer)) {
+            if (reparse_point.size() < offsetof(reparse_point_header, DataBuffer)) {
                 throw formatted_error("IO_REPARSE_TAG_WOF reparse point buffer was {} bytes, expected at least {}.",
-                                      reparse_point.length(), offsetof(reparse_point_header, DataBuffer));
+                                      reparse_point.size(), offsetof(reparse_point_header, DataBuffer));
             }
 
             auto rph = (reparse_point_header*)reparse_point.data();
 
-            if (reparse_point.length() < offsetof(reparse_point_header, DataBuffer) + rph->ReparseDataLength) {
+            if (reparse_point.size() < offsetof(reparse_point_header, DataBuffer) + rph->ReparseDataLength) {
                 throw formatted_error("IO_REPARSE_TAG_WOF reparse point buffer was {} bytes, expected {}.",
-                                      reparse_point.length(), offsetof(reparse_point_header, DataBuffer) + rph->ReparseDataLength);
+                                      reparse_point.size(), offsetof(reparse_point_header, DataBuffer) + rph->ReparseDataLength);
             }
 
             if (rph->ReparseDataLength < sizeof(wof_external_info)) {
@@ -2339,21 +2349,23 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             reparse_point.clear();
             mappings.clear();
 
+            auto wcdsv = string_view((char*)wof_compressed_data.data(), wof_compressed_data.size());
+
             switch (fpei.Algorithm) {
                 case FILE_PROVIDER_COMPRESSION_XPRESS4K:
-                    inline_data = do_xpress_decompress(wof_compressed_data, (uint32_t)file_size, 4096);
+                    inline_data = do_xpress_decompress(wcdsv, (uint32_t)file_size, 4096);
                     break;
 
                 case FILE_PROVIDER_COMPRESSION_LZX:
-                    inline_data = do_lzx_decompress(wof_compressed_data, (uint32_t)file_size);
+                    inline_data = do_lzx_decompress(wcdsv, (uint32_t)file_size);
                     break;
 
                 case FILE_PROVIDER_COMPRESSION_XPRESS8K:
-                    inline_data = do_xpress_decompress(wof_compressed_data, (uint32_t)file_size, 8192);
+                    inline_data = do_xpress_decompress(wcdsv, (uint32_t)file_size, 8192);
                     break;
 
                 case FILE_PROVIDER_COMPRESSION_XPRESS16K:
-                    inline_data = do_xpress_decompress(wof_compressed_data, (uint32_t)file_size, 16384);
+                    inline_data = do_xpress_decompress(wcdsv, (uint32_t)file_size, 16384);
                     break;
 
                 default:
@@ -2375,8 +2387,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         file_size = reparse_point.size();
     } else if (!symlink.empty()) {
         mappings.clear();
-        inline_data = symlink;
         file_size = symlink.size();
+
+        inline_data.resize(symlink.size());
+        memcpy(inline_data.data(), symlink.data(), symlink.size());
     }
 
     if (!is_dir)
@@ -2472,7 +2486,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             }
         }
     } else if (!inline_data.empty()) {
-        if (inline_data.length() > max_inline) {
+        if (inline_data.size() > max_inline) {
             buffer_t buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
             auto compression = opt_compression;
 
@@ -2489,19 +2503,19 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             // round to nearest sector, and zero end
 
-            if (inline_data.length() & (sector_size - 1)) {
-                auto oldlen = inline_data.length();
+            if (inline_data.size() & (sector_size - 1)) {
+                auto oldlen = inline_data.size();
 
-                inline_data.resize((size_t)sector_align(inline_data.length(), sector_size));
-                memset(inline_data.data() + oldlen, 0, inline_data.length() - oldlen);
+                inline_data.resize((size_t)sector_align(inline_data.size(), sector_size));
+                memset(inline_data.data() + oldlen, 0, inline_data.size() - oldlen);
             }
 
             // FIXME - do by sparse extents, if longer than a sector
-            if (vdl < inline_data.length())
-                memset(inline_data.data() + vdl, 0, (size_t)(inline_data.length() - vdl));
+            if (vdl < inline_data.size())
+                memset(inline_data.data() + vdl, 0, (size_t)(inline_data.size() - vdl));
 
             uint64_t pos = 0;
-            string_view data = inline_data;
+            string_view data{(char*)inline_data.data(), inline_data.size()};
 
             while (!data.empty()) {
                 uint64_t len, lcn, cl;
@@ -2603,7 +2617,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             inline_data.clear();
         } else {
-            buffer_t buf(offsetof(EXTENT_DATA, data[0]) + inline_data.length());
+            buffer_t buf(offsetof(EXTENT_DATA, data[0]) + inline_data.size());
 
             auto& ed = *(EXTENT_DATA*)buf.data();
 
@@ -2612,20 +2626,20 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             // FIXME - compress inline extents?
 
             ed.generation = 1;
-            ed.decoded_size = inline_data.length();
+            ed.decoded_size = inline_data.size();
             ed.compression = btrfs_compression::none;
             ed.encryption = 0;
             ed.encoding = 0;
             ed.type = btrfs_extent_type::inline_extent;
 
-            memcpy(ed.data, inline_data.data(), inline_data.length());
+            memcpy(ed.data, inline_data.data(), inline_data.size());
 
-            if (vdl < inline_data.length())
-                memset(ed.data + vdl, 0, (size_t)(inline_data.length() - vdl));
+            if (vdl < inline_data.size())
+                memset(ed.data + vdl, 0, (size_t)(inline_data.size() - vdl));
 
             add_item_move(r, inode, TYPE_EXTENT_DATA, 0, buf);
 
-            ii.st_blocks = inline_data.length();
+            ii.st_blocks = inline_data.size();
         }
     }
 
@@ -2671,7 +2685,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         val2--;
         *val2 = '0';
 
-        xattrs.emplace(EA_DOSATTRIB, make_pair(EA_DOSATTRIB_HASH, string_view(val2, val + sizeof(val) - val2)));
+        auto sv = string_view(val2, val + sizeof(val) - val2);
+        buffer_t buf(sv.size());
+
+        memcpy(buf.data(), sv.data(), sv.size());
+
+        xattrs.emplace(EA_DOSATTRIB, make_pair(EA_DOSATTRIB_HASH, buf));
     }
 
     if (!reparse_point.empty() && is_dir)
