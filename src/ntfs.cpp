@@ -347,10 +347,10 @@ ntfs::ntfs(const string& fn) {
         throw formatted_error("Cannot convert volume with dirty bit set.");
 }
 
-static string read_from_mappings(const list<mapping>& mappings, uint64_t start, uint32_t length, ntfs& dev) {
+static buffer_t read_from_mappings(const list<mapping>& mappings, uint64_t start, uint32_t length, ntfs& dev) {
     uint32_t sector_size = dev.boot_sector->BytesPerSector;
     uint32_t cluster_size = sector_size * dev.boot_sector->SectorsPerCluster;
-    string s(length, 0);
+    buffer_t s(length);
     uint64_t cluster_start = start / cluster_size;
     uint64_t cluster_end = sector_align(start + length, cluster_size) / cluster_size;
 
@@ -362,12 +362,10 @@ static string read_from_mappings(const list<mapping>& mappings, uint64_t start, 
             if (read_end == read_start)
                 continue;
 
-            string buf;
-
-            buf.resize((uint32_t)(read_end - read_start));
+            buffer_t buf((uint32_t)(read_end - read_start));
 
             dev.seek(read_start + ((m.lcn - m.vcn) * cluster_size));
-            dev.read(buf.data(), (uint32_t)(read_end - read_start));
+            dev.read((char*)buf.data(), (uint32_t)(read_end - read_start));
 
             memcpy(s.data(), buf.data() + read_start - start, (size_t)min(read_end - read_start, length - read_start + start));
         }
