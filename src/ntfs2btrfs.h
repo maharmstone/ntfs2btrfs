@@ -26,6 +26,10 @@
 #include <vector>
 #include <optional>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #pragma warning(push)
 #pragma warning(disable : 26495 26451 26437 26812)
 #include <fmt/format.h>
