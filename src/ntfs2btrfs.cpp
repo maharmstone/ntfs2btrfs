@@ -2523,15 +2523,15 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 buffer_t compdata;
 
                 if (compression == btrfs_compression::none)
-                    len = min(max_extent_size, data.length());
+                    len = min((size_t)max_extent_size, data.length());
 #if defined(WITH_ZLIB) || defined(WITH_LZO) || defined(WITH_ZSTD)
                 else if (data.length() <= cluster_size) {
-                    len = min(max_extent_size, data.length());
+                    len = min((size_t)max_extent_size, data.length());
                     ed.compression = btrfs_compression::none;
                 } else {
                     optional<buffer_t> c;
 
-                    len = min(max_comp_extent_size, data.length());
+                    len = min((size_t)max_comp_extent_size, data.length());
 
                     switch (compression) {
 #ifdef WITH_ZLIB
@@ -2567,7 +2567,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     if (pos == 0 && ed.compression == btrfs_compression::none) {
                         ii.flags |= BTRFS_INODE_NOCOMPRESS;
                         compression = btrfs_compression::none;
-                        len = min(max_extent_size, data.length());
+                        len = min((size_t)max_extent_size, data.length());
                     }
 
                     // FIXME - set xattr for compression type?
