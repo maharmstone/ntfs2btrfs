@@ -419,11 +419,13 @@ public:
     void seek(uint64_t pos);
     void read(char* buf, size_t length);
     void write(const char* buf, size_t length);
+    std::string_view find_sd(uint32_t id, ntfs_file& secure);
 
     std::unique_ptr<ntfs_file> mft;
     std::vector<char> boot_sector_buf;
     NTFS_BOOT_SECTOR* boot_sector;
     uint64_t file_record_size;
+    std::map<uint32_t, std::string> sd_list;
 
 #ifdef _WIN32
     HANDLE h;
@@ -435,6 +437,5 @@ public:
 // ntfs.cpp
 void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, std::list<mapping>& mappings,
                                uint32_t cluster_size, uint64_t vdl);
-std::string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev);
 void populate_skip_list(ntfs& dev, uint64_t inode, std::list<uint64_t>& skiplist);
 void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size);

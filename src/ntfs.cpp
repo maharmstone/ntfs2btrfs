@@ -32,8 +32,6 @@
 
 using namespace std;
 
-map<uint32_t, string> sd_list;
-
 void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size) {
     uint64_t sectors;
     uint16_t* seq;
@@ -438,7 +436,7 @@ static bool btree_search(const index_root& ir, const list<mapping>& mappings, co
     return false;
 }
 
-string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev) {
+string_view ntfs::find_sd(uint32_t id, ntfs_file& secure) {
     if (sd_list.count(id) > 0)
         return sd_list.at(id);
 
@@ -449,7 +447,7 @@ string_view find_sd(uint32_t id, ntfs_file& secure, ntfs& dev) {
 
     string ret;
 
-    if (!btree_search(ir, ia, ir.node_header, dev, id, ret))
+    if (!btree_search(ir, ia, ir.node_header, *this, id, ret))
         return "";
 
     const auto& sde = *reinterpret_cast<const sd_entry*>(ret.data());

@@ -2284,7 +2284,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     }
 
     if (sd.empty() && standard_info.size() >= offsetof(STANDARD_INFORMATION, QuotaCharged)) {
-        sd = find_sd(si.SecurityId, secure, dev);
+        sd = dev.find_sd(si.SecurityId, secure);
 
         if (sd.empty()) {
             clear_line();
