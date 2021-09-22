@@ -1813,6 +1813,8 @@ static void clear_line() {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
 
+    // FIXME - flickers on Windows?
+
     if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
         DWORD written;
 
