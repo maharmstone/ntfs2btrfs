@@ -334,24 +334,19 @@ ntfs::ntfs(const string& fn) {
     else
         file_record_size = (uint64_t)boot_sector->BytesPerSector * (uint64_t)boot_sector->SectorsPerCluster * (uint64_t)boot_sector->ClustersPerMFTRecord;
 
-    mft = new ntfs_file(*this, 0);
+    mft.reset(new ntfs_file(*this, 0));
 
-    try {
-        ntfs_file vol_file(*this, NTFS_VOLUME_INODE);
+    ntfs_file vol_file(*this, NTFS_VOLUME_INODE);
 
-        auto vi_str = vol_file.read(0, 0, ntfs_attribute::VOLUME_INFORMATION);
+    auto vi_str = vol_file.read(0, 0, ntfs_attribute::VOLUME_INFORMATION);
 
-        auto vi = reinterpret_cast<VOLUME_INFORMATION*>(vi_str.data());
+    auto vi = reinterpret_cast<VOLUME_INFORMATION*>(vi_str.data());
 
-        if (vi->MajorVersion > 3 || (vi->MajorVersion == 3 && vi->MinorVersion > 1))
-            throw formatted_error("Unsupported NTFS version {}.{}.", vi->MajorVersion, vi->MinorVersion);
+    if (vi->MajorVersion > 3 || (vi->MajorVersion == 3 && vi->MinorVersion > 1))
+        throw formatted_error("Unsupported NTFS version {}.{}.", vi->MajorVersion, vi->MinorVersion);
 
-        if (vi->Flags & NTFS_VOLUME_DIRTY)
-            throw formatted_error("Cannot convert volume with dirty bit set.");
-    } catch (...) {
-        delete mft;
-        throw;
-    }
+    if (vi->Flags & NTFS_VOLUME_DIRTY)
+        throw formatted_error("Cannot convert volume with dirty bit set.");
 }
 
 static string read_from_mappings(const list<mapping>& mappings, uint64_t start, uint32_t length, ntfs& dev) {

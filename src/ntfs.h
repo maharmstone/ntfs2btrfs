@@ -409,9 +409,6 @@ public:
     ntfs(const std::string& fn);
 
     ~ntfs() {
-        if (mft)
-            delete mft;
-
 #ifdef _WIN32
         CloseHandle(h);
 #else
@@ -423,7 +420,7 @@ public:
     void read(char* buf, size_t length);
     void write(const char* buf, size_t length);
 
-    ntfs_file* mft = nullptr;
+    std::unique_ptr<ntfs_file> mft;
     std::vector<char> boot_sector_buf;
     NTFS_BOOT_SECTOR* boot_sector;
     uint64_t file_record_size;
