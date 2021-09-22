@@ -782,15 +782,14 @@ static void set_volume_label(superblock& sb, ntfs& dev) {
 static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum btrfs_compression compression,
                               enum btrfs_csum_type csum_type) {
     uint32_t sector_size = 0x1000; // FIXME
-    string buf;
+    buffer_t buf((size_t)sector_align(sizeof(superblock), sector_size));
     unsigned int i;
     uint32_t sys_chunk_size;
     uint64_t total_used;
 
-    buf.resize((size_t)sector_align(sizeof(superblock), sector_size));
     auto& sb = *(superblock*)buf.data();
 
-    memset(buf.data(), 0, buf.length());
+    memset(buf.data(), 0, buf.size());
 
     sys_chunk_size = 0;
     for (const auto& c : chunk_root.items) {
@@ -874,7 +873,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
 
     i = 0;
     while (superblock_addrs[i] != 0) {
-        if (superblock_addrs[i] > device_size - buf.length())
+        if (superblock_addrs[i] > device_size - buf.size())
             return;
 
         sb.sb_phys_addr = superblock_addrs[i];
@@ -901,7 +900,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
         }
 
         dev.seek(superblock_addrs[i]);
-        dev.write(buf.data(), buf.length());
+        dev.write((char*)buf.data(), buf.size());
 
         i++;
     }
