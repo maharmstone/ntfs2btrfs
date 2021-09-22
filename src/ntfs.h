@@ -399,7 +399,7 @@ public:
 private:
     buffer_t read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att);
 
-    std::vector<char> file_record_buf;
+    buffer_t file_record_buf;
     ntfs& dev;
     uint64_t inode;
 };

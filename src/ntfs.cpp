@@ -64,7 +64,7 @@ ntfs_file::ntfs_file(ntfs& dev, uint64_t inode) : dev(dev), inode(inode) {
 
     if (inode == 0) {
         dev.seek(dev.boot_sector->MFT * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster);
-        dev.read(file_record_buf.data(), (uint32_t)dev.file_record_size);
+        dev.read((char*)file_record_buf.data(), (uint32_t)dev.file_record_size);
     } else { // read from MFT
         auto str = dev.mft->read(inode * dev.file_record_size, (uint32_t)dev.file_record_size);
 
