@@ -374,7 +374,7 @@ static buffer_t read_from_mappings(const list<mapping>& mappings, uint64_t start
     return s;
 }
 
-static optional<string> btree_search(const index_root& ir, const list<mapping>& mappings, const index_node_header& inh,
+static optional<buffer_t> btree_search(const index_root& ir, const list<mapping>& mappings, const index_node_header& inh,
                                      ntfs& dev, uint32_t key) {
     auto ent = reinterpret_cast<const index_entry*>((uint8_t*)&inh + inh.first_entry);
 
@@ -386,7 +386,7 @@ static optional<string> btree_search(const index_root& ir, const list<mapping>& 
                 uint32_t v1 = *(uint32_t*)((uint8_t*)ent + sizeof(index_entry));
 
                 if (v1 == key)
-                    return string((char*)ent + sizeof(index_entry) + ent->stream_length, ent->entry_length - sizeof(index_entry) - ent->stream_length - sizeof(uint64_t));
+                    return buffer_t((uint8_t*)ent + sizeof(index_entry) + ent->stream_length, (uint8_t*)ent + ent->entry_length - sizeof(uint64_t));
 
                 skip = key > v1;
             }
@@ -414,7 +414,7 @@ static optional<string> btree_search(const index_root& ir, const list<mapping>& 
             uint32_t v = *(uint32_t*)((uint8_t*)ent + sizeof(index_entry));
 
             if (v == key)
-                return string((char*)ent + sizeof(index_entry) + ent->stream_length, ent->entry_length - sizeof(index_entry) - ent->stream_length);
+                return buffer_t((uint8_t*)ent + sizeof(index_entry) + ent->stream_length, (uint8_t*)ent + ent->entry_length);
             else if (v > key)
                 break;
         }
