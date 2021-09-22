@@ -777,7 +777,7 @@ void ntfs::read(char* buf, size_t length) {
 #endif
 }
 
-void ntfs::write(const char* buf, size_t length) {
+void ntfs::write(const uint8_t* buf, size_t length) {
 #ifdef _WIN32
     DWORD written;
 
