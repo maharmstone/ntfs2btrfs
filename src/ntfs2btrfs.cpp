@@ -2460,17 +2460,15 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             }
 
             if (vdl < alloc_size) { // zero end of final sector if necessary
-                string sector;
-
-                sector.resize(sector_size);
+                buffer_t sector(sector_size);
 
                 dev.seek((mappings.back().lcn + mappings.back().length - 1) * cluster_size);
-                dev.read(sector.data(), sector.length());
+                dev.read((char*)sector.data(), sector.size());
 
                 memset(sector.data() + (vdl % sector_size), 0, sector_size - (vdl % sector_size));
 
                 dev.seek((mappings.back().lcn + mappings.back().length - 1) * cluster_size);
-                dev.write((uint8_t*)sector.data(), sector.length());
+                dev.write(sector.data(), sector.size());
             }
         }
 
