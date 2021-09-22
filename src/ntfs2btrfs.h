@@ -323,13 +323,13 @@ std::string do_xpress_decompress(const std::string_view& compdata, uint32_t size
 
 // compress.cpp
 #ifdef WITH_ZLIB
-std::optional<std::string> zlib_compress(const std::string_view& data, uint32_t cluster_size);
+std::optional<buffer_t> zlib_compress(const std::string_view& data, uint32_t cluster_size);
 #endif
 #ifdef WITH_LZO
-std::optional<std::string> lzo_compress(const std::string_view& data, uint32_t cluster_size);
+std::optional<buffer_t> lzo_compress(const std::string_view& data, uint32_t cluster_size);
 #endif
 #ifdef WITH_ZSTD
-std::optional<std::string> zstd_compress(const std::string_view& data, uint32_t cluster_size);
+std::optional<buffer_t> zstd_compress(const std::string_view& data, uint32_t cluster_size);
 #endif
 
 // sha256.c

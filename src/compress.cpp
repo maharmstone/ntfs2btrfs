@@ -32,10 +32,10 @@
 using namespace std;
 
 #ifdef WITH_ZLIB
-optional<string> zlib_compress(const string_view& data, uint32_t cluster_size) {
+optional<buffer_t> zlib_compress(const string_view& data, uint32_t cluster_size) {
     z_stream c_stream;
     int ret;
-    string out(data.length(), 0);
+    buffer_t out(data.length());
 
     c_stream.zalloc = Z_NULL;
     c_stream.zfree = Z_NULL;
@@ -50,7 +50,7 @@ optional<string> zlib_compress(const string_view& data, uint32_t cluster_size) {
     c_stream.avail_in = (unsigned int)data.length();
 
     c_stream.next_out = (uint8_t*)out.data();
-    c_stream.avail_out = (unsigned int)out.length();
+    c_stream.avail_out = (unsigned int)out.size();
 
     do {
         ret = deflate(&c_stream, Z_FINISH);
@@ -84,7 +84,7 @@ static __inline size_t lzo_max_outlen(size_t inlen) {
     return inlen + (inlen / 16) + 64 + 3; // formula comes from LZO.FAQ
 }
 
-optional<string> lzo_compress(const string_view& data, uint32_t cluster_size) {
+optional<buffer_t> lzo_compress(const string_view& data, uint32_t cluster_size) {
     size_t num_pages;
 
     num_pages = data.length() / cluster_size;
@@ -93,8 +93,8 @@ optional<string> lzo_compress(const string_view& data, uint32_t cluster_size) {
     // Another four-byte header page
     // Each page has a maximum size of lzo_max_outlen(cluster_size)
     // Plus another four bytes for possible padding
-    string outbuf(sizeof(uint32_t) + ((lzo_max_outlen(cluster_size) + (2 * sizeof(uint32_t))) * num_pages), 0);
-    string wrkmem(LZO1X_MEM_COMPRESS, 0);
+    buffer_t outbuf(sizeof(uint32_t) + ((lzo_max_outlen(cluster_size) + (2 * sizeof(uint32_t))) * num_pages));
+    buffer_t wrkmem(LZO1X_MEM_COMPRESS);
 
     auto out_size = (uint32_t*)outbuf.data();
     *out_size = sizeof(uint32_t);
@@ -129,20 +129,20 @@ optional<string> lzo_compress(const string_view& data, uint32_t cluster_size) {
 
     outbuf.resize(*out_size);
 
-    if (outbuf.length() > data.length() - cluster_size)
+    if (outbuf.size() > data.length() - cluster_size)
         return nullopt;
 
-    outbuf.resize((outbuf.length() + cluster_size - 1) & ~((uint64_t)cluster_size - 1), 0);
+    outbuf.resize((outbuf.size() + cluster_size - 1) & ~((uint64_t)cluster_size - 1), 0);
 
     return outbuf;
 }
 #endif
 
 #ifdef WITH_ZSTD
-optional<string> zstd_compress(const string_view& data, uint32_t cluster_size) {
-    string out(ZSTD_compressBound(data.length()), 0);
+optional<buffer_t> zstd_compress(const string_view& data, uint32_t cluster_size) {
+    buffer_t out(ZSTD_compressBound(data.length()));
 
-    auto ret = ZSTD_compress(out.data(), out.length(), data.data(), data.length(), 1);
+    auto ret = ZSTD_compress(out.data(), out.size(), data.data(), data.length(), 1);
     if (ZSTD_isError(ret))
         throw formatted_error("ZSTD_compress returned {}", ret);
 
@@ -150,7 +150,7 @@ optional<string> zstd_compress(const string_view& data, uint32_t cluster_size) {
         return nullopt;
 
     out.resize(ret);
-    out.resize((out.length() + cluster_size - 1) & ~((uint64_t)cluster_size - 1), 0);
+    out.resize((out.size() + cluster_size - 1) & ~((uint64_t)cluster_size - 1), 0);
 
     return out;
 }

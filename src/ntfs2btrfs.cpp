@@ -2507,7 +2507,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             while (!data.empty()) {
                 uint64_t len, lcn, cl;
                 bool inserted = false;
-                string compdata;
+                buffer_t compdata;
 
                 if (compression == btrfs_compression::none)
                     len = min(max_extent_size, data.length());
@@ -2516,7 +2516,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     len = min(max_extent_size, data.length());
                     ed.compression = btrfs_compression::none;
                 } else {
-                    optional<string> c;
+                    optional<buffer_t> c;
 
                     len = min(max_comp_extent_size, data.length());
 
@@ -2562,7 +2562,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 #endif
 
                 ed.decoded_size = ed2.num_bytes = len;
-                ed2.size = ed.compression == btrfs_compression::none ? len : compdata.length();
+                ed2.size = ed.compression == btrfs_compression::none ? len : compdata.size();
                 ii.st_blocks += ed.decoded_size;
 
                 ed2.address = allocate_data(ed2.size, true);
@@ -2573,7 +2573,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 if (ed.compression == btrfs_compression::none)
                     dev.write(data.data(), (size_t)len);
                 else
-                    dev.write(compdata.data(), compdata.length());
+                    dev.write((char*)compdata.data(), compdata.size());
 
                 add_item(r, inode, TYPE_EXTENT_DATA, pos, buf);
 
