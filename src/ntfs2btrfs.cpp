@@ -3081,14 +3081,12 @@ static void protect_superblocks(ntfs& dev, runs_t& runs) {
 
 static void clear_first_cluster(ntfs& dev) {
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-    string data;
+    buffer_t data(cluster_size);
 
-    data.resize(cluster_size);
-
-    memset(data.data(), 0, cluster_size);
+    memset(data.data(), 0, data.size());
 
     dev.seek(0);
-    dev.write(data.data(), data.length());
+    dev.write((char*)data.data(), data.size());
 }
 
 static void calc_used_space(const runs_t& runs, uint32_t cluster_size) {
