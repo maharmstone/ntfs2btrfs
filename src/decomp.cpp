@@ -22,8 +22,8 @@
 
 using namespace std;
 
-static string lznt1_decompress_chunk(string_view data) {
-    string s;
+static buffer_t lznt1_decompress_chunk(string_view data) {
+    buffer_t s;
 
     while (!data.empty()) {
         auto fg = (uint8_t)data[0];
@@ -32,11 +32,11 @@ static string lznt1_decompress_chunk(string_view data) {
 
         if (fg == 0) {
             if (data.length() < 8) {
-                s.append(data);
+                s.insert(s.end(), data.begin(), data.end());
 
                 return s;
             } else {
-                s.append(data.substr(0, 8));
+                s.insert(s.end(), data.begin(), data.begin() + 8);
                 data = data.substr(8);
             }
         } else {
@@ -45,7 +45,7 @@ static string lznt1_decompress_chunk(string_view data) {
                     return s;
 
                 if (!(fg & 1)) {
-                    s.append(data.substr(0, 1));
+                    s.insert(s.end(), data.begin(), data.begin() + 1);
                     data = data.substr(1);
                 } else {
                     if (data.length() < sizeof(uint16_t))
@@ -59,7 +59,7 @@ static string lznt1_decompress_chunk(string_view data) {
 
                     // Shamelessly stolen from https://github.com/you0708/lznt1 - thank you!
 
-                    uint64_t u = s.length() - 1;
+                    uint64_t u = s.size() - 1;
                     uint64_t lm = 0xfff;
                     uint64_t os = 12;
 
@@ -72,10 +72,11 @@ static string lznt1_decompress_chunk(string_view data) {
                     auto l = (v & lm) + 3;
                     auto d = (v >> os) + 1;
 
-                    s.reserve((uint32_t)(s.length() + l));
+                    s.reserve((uint32_t)(s.size() + l));
 
                     while (l > 0) {
-                        s.append(s.substr(s.length() - d, 1));
+                        s.resize(s.size() + 1);
+                        s[s.size() - 1] = s[s.size() - d - 1];
                         l--;
                     }
                 }
@@ -124,13 +125,13 @@ buffer_t lznt1_decompress(string_view compdata, uint32_t size) {
         if (h & 0x8000) {
             auto c = lznt1_decompress_chunk(data);
 
-            if (ptr + c.length() >= ret.data() + size) {
+            if (ptr + c.size() >= ret.data() + size) {
                 memcpy(ptr, c.data(), size - (ptr - ret.data()));
 
                 return ret;
             } else {
-                memcpy(ptr, c.data(), c.length());
-                ptr += c.length();
+                memcpy(ptr, c.data(), c.size());
+                ptr += c.size();
             }
         } else {
             if (ptr + data.length() >= ret.data() + size) {
