@@ -425,7 +425,7 @@ public:
     std::vector<char> boot_sector_buf;
     NTFS_BOOT_SECTOR* boot_sector;
     uint64_t file_record_size;
-    std::map<uint32_t, std::string> sd_list;
+    std::map<uint32_t, buffer_t> sd_list;
 
 #ifdef _WIN32
     HANDLE h;

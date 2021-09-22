@@ -437,8 +437,10 @@ static bool btree_search(const index_root& ir, const list<mapping>& mappings, co
 }
 
 string_view ntfs::find_sd(uint32_t id, ntfs_file& secure) {
-    if (sd_list.count(id) > 0)
-        return sd_list.at(id);
+    if (sd_list.count(id) > 0) {
+        const auto& sd = sd_list.at(id);
+        return {(char*)sd.data(), sd.size()};
+    }
 
     auto ir_str = secure.read(0, 0, ntfs_attribute::INDEX_ROOT, u"$SII");
     auto ia = secure.read_mappings(ntfs_attribute::INDEX_ALLOCATION, u"$SII");
@@ -457,9 +459,14 @@ string_view ntfs::find_sd(uint32_t id, ntfs_file& secure) {
     if (memcmp(&sde, sde2.data(), sizeof(sd_entry)))
         throw formatted_error("SD headers do not match.");
 
-    sd_list[id] = string_view((char*)sde2.data(), sde2.size()).substr(sizeof(sd_entry));
+    auto sv = string_view((char*)sde2.data(), sde2.size()).substr(sizeof(sd_entry));
+    buffer_t buf(sv.data(), sv.data() + sv.length());
 
-    return sd_list.at(id);
+    auto [it, success] = sd_list.emplace(make_pair(id, buffer_t{}));
+
+    it->second.swap(buf);
+
+    return string_view((char*)it->second.data(), it->second.size());
 }
 
 static void walk_btree(const index_root& ir, const list<mapping>& mappings, const index_node_header& inh, ntfs& dev,
