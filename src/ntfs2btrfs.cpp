@@ -1819,9 +1819,9 @@ static void clear_line() {
 
         SetConsoleCursorPosition(console, { 0, csbi.dwCursorPosition.Y });
 
-        string spaces(csbi.dwSize.X, ' ');
+        u16string spaces(csbi.dwSize.X, u' ');
 
-        WriteConsole(console, spaces.data(), (DWORD)spaces.length(), &written, nullptr);
+        WriteConsoleW(console, spaces.data(), (DWORD)spaces.length(), &written, nullptr);
 
         SetConsoleCursorPosition(console, { 0, csbi.dwCursorPosition.Y });
     }
