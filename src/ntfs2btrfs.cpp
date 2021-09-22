@@ -2816,7 +2816,7 @@ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint
     }
 }
 
-#ifndef _WIN32 // FIXME - also for Windows
+#ifndef _WIN32 // doesn't seem to work on Windows for volumes (CreateFileMapping returns ERROR_INVALID_PARAMETER)
 class memory_map {
 public:
     memory_map(int fd, uint64_t off, size_t length) : length(length) {
