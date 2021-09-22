@@ -179,7 +179,7 @@ buffer_t ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length,
                 buf_start = 0;
 
             if (offset + length > (m.vcn + m.length) * cluster_size)
-                buf_end = (uint32_t)((m.vcn + m.length) * cluster_size);
+                buf_end = min((uint32_t)((m.vcn + m.length) * cluster_size), length);
             else
                 buf_end = length;
 
