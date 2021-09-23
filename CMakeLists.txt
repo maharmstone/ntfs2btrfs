@@ -5,7 +5,7 @@ else()
     cmake_minimum_required(VERSION 3.14.3)
 endif()
 
-project(ntfs2btrfs VERSION 20210523)
+project(ntfs2btrfs VERSION 20210923)
 
 include(GNUInstallDirs)
 
