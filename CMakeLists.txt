@@ -1,9 +1,7 @@
-if(MSVC)
-    cmake_minimum_required(VERSION 3.15)
-    cmake_policy(SET CMP0091 NEW)
-else()
-    cmake_minimum_required(VERSION 3.14.3)
-endif()
+cmake_minimum_required(VERSION 3.14.3)
+
+cmake_policy(SET CMP0091 NEW)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 project(ntfs2btrfs VERSION 20210923)
 
@@ -58,8 +56,6 @@ else()
 endif()
 
 add_executable(ntfs2btrfs ${SRC_FILES})
-set_property(TARGET ntfs2btrfs PROPERTY
-    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 target_link_libraries(ntfs2btrfs fmt::fmt-header-only)
 
