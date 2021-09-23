@@ -2,16 +2,60 @@
 .SH NAME
 ntfs2btrfs \- convert ntfs filesystem to btrfs filesystem
 .SH SYNOPSIS
-.B ntfs2btrfs
-\fI\,device\/\fR
+\fBntfs2btrfs\fR [options] \fIdevice\fR
 .SH DESCRIPTION
 This is a tool which does in-place conversion of Microsoft's NTFS filesystem
-to the open-source filesystem Btrfs, much as btrfs-convert does for ext2.
-The original image is saved as a reflink copy at image/ntfs.img, and if you
-want to keep the conversion you can delete this to free up space.
+to the open-source filesystem Btrfs, much as \fBbtrfs\-convert\fR does for ext2.
+.SH OPTIONS
+.PP
+-c \fI<ALGO>\fR, --compress=\fI<ALGO>\fR
+.RS 4
+Uses the specified algorithm to recompress files that are compressed on the
+NTFS volume; valid choices are \fIzstd\fR, \fIlzo\fR, \fIzlib\fR, or \fInone\fR.
+If you don't specify any value, \fIzstd\fR will be used, assuming it's been
+compiled in.
+.RE
+.PP
+-h \fI<ALGO>\fR, --hash=\fI<ALGO>\fR
+.RS 4
+Uses the specified checksumming algorithm; valid choices are \fIcrc32c\fR,
+\fIxxhash\fR, \fIsha256\fR, and \fIblake2\fR. The first of these will be used by
+default, and should be fine for most purposes.
+.RE
+.PP
+-r, --rollback
+.RS 4
+Tries to restore the original NTFS filesystem. See \fBROLLBACK\fR below.
+.RE
+.SH ROLLBACK
+The original filesystem image is saved as \fIimage/ntfs.img\fR as a reflink copy. You
+can restore this at any time by using the rollback option, provided that you've
+not moved the data by doing a balance. Bear in mind that this restores the volume
+to how it was when you did the conversion, meaning that any changes you've made
+since will be lost.
+.PP
+If you decide to keep the conversion, you can remove the \fIimage\fR subvolume at
+any point to free up space.
+.SH XATTRS
+Various bits of NTFS-specific data are stored as Btrfs xattrs, in a manner that
+the Windows btrfs driver understands (\fBhttps://github.com/maharmstone/btrfs\fR). Some
+should also be understood by tools such as Wine and Samba, but YMMV.
+.IP \[bu] 2
+The NTFS attribute value is stored as a hex string at \fIuser.DOSATTRIB\fR.
+.IP \[bu] 2
+The reparse points on directories are stored at \fIuser.reparse\fR. NTFS symlinks should
+be converted into POSIX symlinks. The data for other reparse points will be stored as
+the contents of the files.
+.IP \[bu] 2
+The NT security descriptor is stored as \fIsecurity.NTACL\fR.
+.IP \[bu] 2
+Alternate data streams on files are stored in the \fIuser\fR namespace, e.g. \fI:Zone.Identifier\fR
+becomes \fIuser.Zone.Identifier\fR.
 .SH SEE ALSO
 .BR btrfs (8),
 .BR mkfs.btrfs (8).
-.SH "INTERNET"
-.IP https://github.com/maharmstone/quibble
-.IP https://github.com/maharmstone/btrfs
+.SH AUTHOR
+Written by Mark Harmstone (\fBmark@harmstone.com\fR).
+
+.SH WEB
+.IP https://github.com/maharmstone/ntfs2btrfs
