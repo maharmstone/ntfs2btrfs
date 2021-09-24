@@ -287,7 +287,7 @@ ntfs::ntfs(const string& fn) {
     wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
     u16string namew;
 
-    if ((fn.length() == 2 || fn.length() == 3) && fn[0] >= 'A' && fn[0] <= 'Z' && fn[1] == ':' && (fn.length() == 2 || fn[2] == '\\')) {
+    if ((fn.length() == 2 || fn.length() == 3) && ((fn[0] >= 'A' && fn[0] <= 'Z') || (fn[0] >= 'a' && fn[0] <= 'z')) && fn[1] == ':' && (fn.length() == 2 || fn[2] == '\\')) {
         namew = u"\\\\.\\X:";
         namew[4] = fn[0];
         drive = true;
