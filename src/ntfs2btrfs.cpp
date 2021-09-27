@@ -1153,7 +1153,7 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
     return r;
 }
 
-static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode) {
+static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode, bool nocsum) {
     INODE_ITEM ii;
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
 
@@ -1167,6 +1167,9 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode)
     ii.st_nlink = 1;
     ii.st_mode = __S_IFREG | S_IRUSR | S_IWUSR;
     ii.sequence = 1;
+
+    if (nocsum)
+        ii.flags = BTRFS_INODE_NODATACOW | BTRFS_INODE_NODATASUM;
 
     // FIXME - use current time for the following
 //     BTRFS_TIME st_atime;
@@ -1860,7 +1863,8 @@ static bool string_eq_ci(const string_view& s1, const string_view& s2) {
 }
 
 static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir, runs_t& runs,
-                      ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist, enum btrfs_compression opt_compression) {
+                      ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist, enum btrfs_compression opt_compression,
+                      bool nocsum) {
     INODE_ITEM ii;
     uint64_t file_size = 0;
     list<mapping> mappings;
@@ -2410,6 +2414,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     ii.sequence = 1;
 
+    if (nocsum && !is_dir)
+        ii.flags = BTRFS_INODE_NODATACOW | BTRFS_INODE_NODATASUM;
+
     // FIXME - xattrs (EAs, etc.)
     // FIXME - LXSS
 
@@ -2703,7 +2710,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 }
 
 static void create_inodes(root& r, const buffer_t& mftbmp, ntfs& dev, runs_t& runs, ntfs_file& secure,
-                          enum btrfs_compression compression) {
+                          enum btrfs_compression compression, bool nocsum) {
     list<space> inodes;
     list<uint64_t> skiplist;
     uint64_t total = 0, num = 0;
@@ -2724,7 +2731,7 @@ static void create_inodes(root& r, const buffer_t& mftbmp, ntfs& dev, runs_t& ru
 
         try {
             if (ntfs_inode >= first_ntfs_inode)
-                add_inode(r, inode, ntfs_inode, dir, runs, secure, dev, skiplist, compression);
+                add_inode(r, inode, ntfs_inode, dir, runs, secure, dev, skiplist, compression, nocsum);
             else if (ntfs_inode != NTFS_ROOT_DIR_INODE)
                 populate_skip_list(dev, ntfs_inode, skiplist);
         } catch (...) {
@@ -3180,7 +3187,7 @@ static void update_dir_sizes(root& r) {
     }
 }
 
-static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_csum_type csum_type) {
+static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_csum_type csum_type, bool nocsum) {
     uint32_t sector_size = 0x1000; // FIXME
     uint64_t cluster_size = (uint64_t)dev.boot_sector->BytesPerSector * (uint64_t)dev.boot_sector->SectorsPerCluster;
     runs_t runs;
@@ -3274,14 +3281,14 @@ static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_cs
     {
         ntfs_file secure(dev, NTFS_SECURE_INODE);
 
-        create_inodes(fstree_root, mftbmp, dev, runs, secure, compression);
+        create_inodes(fstree_root, mftbmp, dev, runs, secure, compression, nocsum);
     }
 
     fmt::print("Mapped {} inodes directly.\n", mapped_inodes);
     fmt::print("Rewrote {} inodes.\n", rewritten_inodes);
     fmt::print("Inlined {} inodes.\n", inline_inodes);
 
-    create_image(image_subvol, dev, runs, image_inode);
+    create_image(image_subvol, dev, runs, image_inode, nocsum);
 
     roots.emplace_back(BTRFS_ROOT_UUID);
     add_subvol_uuid(roots.back());
@@ -3296,7 +3303,8 @@ static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_cs
             update_dir_sizes(r);
     }
 
-    calc_checksums(csum_root, runs, dev, csum_type);
+    if (!nocsum)
+        calc_checksums(csum_root, runs, dev, csum_type);
 
     populate_root_root(root_root);
 
@@ -3430,6 +3438,7 @@ Convert an NTFS filesystem to Btrfs.
   -h, --hash=ALGO            checksum algorithm to use; ALGO can be 'crc32c'
                                 (default), 'xxhash', 'sha256', or 'blake2'
   -r, --rollback             rollback to the original filesystem
+  -d, --no-datasum           disable data checksums
 )");
             return 1;
         }
@@ -3437,7 +3446,7 @@ Convert an NTFS filesystem to Btrfs.
         string fn;
         enum btrfs_compression compression;
         enum btrfs_csum_type csum_type;
-        bool do_rollback = false;
+        bool do_rollback = false, nocsum = false;
 
 #ifdef WITH_ZSTD
         compression = btrfs_compression::zstd;
@@ -3473,6 +3482,8 @@ Convert an NTFS filesystem to Btrfs.
                     csum_type = parse_csum_type(arg.substr(11));
                 else if (arg == "-r" || arg == "--rollback")
                     do_rollback = true;
+                else if (arg == "-d" || arg == "--no-datasum")
+                    nocsum = true;
                 else
                     throw formatted_error("Unrecognized option {}.", arg);
 
@@ -3547,9 +3558,12 @@ Convert an NTFS filesystem to Btrfs.
                 break;
         }
 
+        if (nocsum)
+            fmt::print("Not calculating checksums.\n");
+
         ntfs dev(fn);
 
-        convert(dev, compression, csum_type);
+        convert(dev, compression, csum_type, nocsum);
     } catch (const exception& e) {
         cerr << e.what() << endl;
         return 1;
