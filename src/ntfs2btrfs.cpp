@@ -1878,7 +1878,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     string filename;
     buffer_t wof_compressed_data;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-    bool processed_data = false;
+    bool processed_data = false, skipping = false;
     uint16_t compression_unit = 0;
     uint64_t vdl;
     vector<string> warnings;
@@ -1910,7 +1910,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        warnings.emplace_back(fmt::format("Skipping encrypted inode {:x} ({})", inode - inode_offset, filename));
+                        fmt::print(stderr, "Skipping encrypted inode {:x} ({})\n", inode - inode_offset, filename);
+                        skipping = true;
                         return true;
                     }
 
@@ -2171,6 +2172,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
         return true;
     });
+
+    if (skipping)
+        return;
 
     // skip page files
     if (links.size() == 1 && get<0>(links.front()) == NTFS_ROOT_DIR_INODE) {
