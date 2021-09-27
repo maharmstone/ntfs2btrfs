@@ -1862,6 +1862,35 @@ static bool string_eq_ci(const string_view& s1, const string_view& s2) {
     return true;
 }
 
+static void fix_truncated_utf8(string& s) {
+    if (!((uint8_t)s.back() & 0x80)) // one-byte sequence
+        return;
+
+    if (((uint8_t)s.back() & 0xC0) == 0xC0) { // first byte of CP, nothing following
+        s.pop_back();
+        return;
+    }
+
+    if (((uint8_t)s[s.length() - 2] & 0xE0) == 0xD0) // full two-byte sequence
+        return;
+
+    if (((uint8_t)s[s.length() - 2] & 0xE0) == 0xE0) { // three- or four-byte CP, two bytes
+        s.pop_back();
+        s.pop_back();
+        return;
+    }
+
+    if (((uint8_t)s[s.length() - 3] & 0xF0) == 0xE0) // full three-byte sequence
+        return;
+
+    if (((uint8_t)s[s.length() - 3] & 0xF0) == 0xF0) { // four-byte CP, three bytes
+        s.pop_back();
+        s.pop_back();
+        s.pop_back();
+        return;
+    }
+}
+
 static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir, runs_t& runs,
                       ntfs_file& secure, ntfs& dev, const list<uint64_t>& skiplist, enum btrfs_compression opt_compression,
                       bool nocsum) {
@@ -2050,6 +2079,18 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         throw formatted_error("FILE_NAME was truncated");
 
                     auto name2 = convert.to_bytes(fn->FileName, fn->FileName + fn->FileNameLength);
+
+                    if (name2.length() > 255) {
+                        if (filename.empty())
+                            filename = f.get_filename();
+
+                        // FIXME - make sure no collision with existing file
+
+                        name2 = name2.substr(0, 255);
+                        fix_truncated_utf8(name2);
+
+                        warnings.emplace_back(fmt::format("{}: Name was too long, truncating to {}.", filename, name2));
+                    }
 
                     uint64_t parent = fn->Parent.SegmentNumber;
 
