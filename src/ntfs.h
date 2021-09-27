@@ -295,8 +295,18 @@ typedef struct {
         struct {
             uint8_t DataBuffer[1];
         } GenericReparseBuffer;
+
+        struct {
+            uint32_t unknown;
+            char name[1];
+        } LxSymlink; // undocumented
     };
 } REPARSE_DATA_BUFFER;
+
+typedef struct {
+    uint32_t unknown;
+    char name[1];
+} REPARSE_DATA_BUFFER_LX_SYMLINK;
 
 #ifndef IO_REPARSE_TAG_SYMLINK
 #define IO_REPARSE_TAG_SYMLINK      0xa000000c

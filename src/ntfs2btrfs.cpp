@@ -2142,7 +2142,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 break;
             }
 
-            case ntfs_attribute::SYMBOLIC_LINK:
+            case ntfs_attribute::SYMBOLIC_LINK: {
                 if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
                     throw formatted_error("Error - SYMBOLIC_LINK is non-resident"); // FIXME - can this happen?
 
@@ -2151,24 +2151,40 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                 symlink.clear();
 
-                if (!is_dir && reparse_point.size() > offsetof(REPARSE_DATA_BUFFER, SymbolicLinkReparseBuffer.PathBuffer)) {
-                    auto rpb = reinterpret_cast<const REPARSE_DATA_BUFFER*>(reparse_point.data());
+                if (is_dir)
+                    break;
 
-                    if ((rpb->ReparseTag == IO_REPARSE_TAG_SYMLINK && rpb->SymbolicLinkReparseBuffer.Flags & SYMLINK_FLAG_RELATIVE) ||
-                        rpb->ReparseTag == IO_REPARSE_TAG_LX_SYMLINK) {
+                const auto& rpb = *reinterpret_cast<const REPARSE_DATA_BUFFER*>(reparse_point.data());
 
-                        if (reparse_point.size() < offsetof(REPARSE_DATA_BUFFER, SymbolicLinkReparseBuffer.PathBuffer) +
-                                                   rpb->SymbolicLinkReparseBuffer.PrintNameOffset +
-                                                   rpb->SymbolicLinkReparseBuffer.PrintNameLength) {
+                if (reparse_point.size() < offsetof(REPARSE_DATA_BUFFER, Reserved) ||
+                    reparse_point.size() < rpb.ReparseDataLength + offsetof(REPARSE_DATA_BUFFER, GenericReparseBuffer.DataBuffer)) {
+                    clear_line();
+
+                    if (filename.empty())
+                        filename = f.get_filename();
+
+                    warnings.emplace_back(fmt::format("Reparse point buffer of {} was truncated.", filename));
+
+                    break;
+                }
+
+                auto len = rpb.ReparseDataLength + offsetof(REPARSE_DATA_BUFFER, GenericReparseBuffer.DataBuffer);
+
+                switch (rpb.ReparseTag) {
+                    case IO_REPARSE_TAG_SYMLINK:
+                        if (len < offsetof(REPARSE_DATA_BUFFER, SymbolicLinkReparseBuffer.PathBuffer) ||
+                            (len < offsetof(REPARSE_DATA_BUFFER, SymbolicLinkReparseBuffer.PathBuffer) +
+                                            rpb.SymbolicLinkReparseBuffer.PrintNameOffset +
+                                            rpb.SymbolicLinkReparseBuffer.PrintNameLength)) {
                             clear_line();
 
                             if (filename.empty())
                                 filename = f.get_filename();
 
-                            warnings.emplace_back(fmt::format("Reparse point buffer of {} was truncated.", filename));
-                        } else {
-                            symlink = convert.to_bytes(&rpb->SymbolicLinkReparseBuffer.PathBuffer[rpb->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(char16_t)],
-                                                       &rpb->SymbolicLinkReparseBuffer.PathBuffer[(rpb->SymbolicLinkReparseBuffer.PrintNameOffset + rpb->SymbolicLinkReparseBuffer.PrintNameLength) / sizeof(char16_t)]);
+                            warnings.emplace_back(fmt::format("Symlink reparse point buffer of {} was truncated.", filename));
+                        } else if (rpb.SymbolicLinkReparseBuffer.Flags & SYMLINK_FLAG_RELATIVE) {
+                            symlink = convert.to_bytes(&rpb.SymbolicLinkReparseBuffer.PathBuffer[rpb.SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(char16_t)],
+                                                       &rpb.SymbolicLinkReparseBuffer.PathBuffer[(rpb.SymbolicLinkReparseBuffer.PrintNameOffset + rpb.SymbolicLinkReparseBuffer.PrintNameLength) / sizeof(char16_t)]);
 
                             for (auto& c : symlink) {
                                 if (c == '\\')
@@ -2177,9 +2193,25 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                             reparse_point.clear();
                         }
-                    }
+                    break;
+
+                    case IO_REPARSE_TAG_LX_SYMLINK:
+                        if (len < offsetof(REPARSE_DATA_BUFFER, LxSymlink.name)) {
+                            clear_line();
+
+                            if (filename.empty())
+                                filename = f.get_filename();
+
+                            warnings.emplace_back(fmt::format("LXSS reparse point buffer of {} was truncated.", filename));
+                        } else {
+                            symlink = string_view(rpb.LxSymlink.name, len - offsetof(REPARSE_DATA_BUFFER, LxSymlink.name));
+                            reparse_point.clear();
+                        }
+                    break;
                 }
-            break;
+
+                break;
+            }
 
             case ntfs_attribute::SECURITY_DESCRIPTOR: {
                 auto max_sd_size = (uint32_t)(tree_size - sizeof(tree_header) - sizeof(leaf_node) - offsetof(DIR_ITEM, name[0]) - sizeof(EA_NTACL) + 1);
