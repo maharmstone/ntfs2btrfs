@@ -1921,10 +1921,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     is_dir = f.is_directory();
 
-    f.loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER* att, const string_view& res_data, const u16string_view& name) -> bool {
-        switch (att->TypeCode) {
+    f.loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view& res_data, const u16string_view& name) -> bool {
+        switch (att.TypeCode) {
             case ntfs_attribute::STANDARD_INFORMATION:
-                if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
+                if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
                     throw formatted_error("Error - STANDARD_INFORMATION is non-resident"); // FIXME - can this happen?
 
                 standard_info.resize(res_data.length());
@@ -1933,7 +1933,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             case ntfs_attribute::DATA:
                 if (name.empty()) { // main file data
-                    if (att->Flags & ATTRIBUTE_FLAG_ENCRYPTED) {
+                    if (att.Flags & ATTRIBUTE_FLAG_ENCRYPTED) {
                         clear_line();
 
                         if (filename.empty())
@@ -1944,18 +1944,18 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         return true;
                     }
 
-                    if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM && !processed_data) {
-                        file_size = vdl = att->Form.Resident.ValueLength;
+                    if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM && !processed_data) {
+                        file_size = vdl = att.Form.Resident.ValueLength;
 
                         inline_data.resize(res_data.size());
                         memcpy(inline_data.data(), res_data.data(), res_data.size());
                     } else {
                         if (!processed_data) {
-                            file_size = att->Form.Nonresident.FileSize;
-                            compression_unit = att->Form.Nonresident.CompressionUnit;
-                            vdl = att->Form.Nonresident.ValidDataLength;
+                            file_size = att.Form.Nonresident.FileSize;
+                            compression_unit = att.Form.Nonresident.CompressionUnit;
+                            vdl = att.Form.Nonresident.ValidDataLength;
 
-                            if (!(att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK))
+                            if (!(att.Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK))
                                 compression_unit = 0;
                         }
 
@@ -1967,10 +1967,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         else
                             last_vcn = mappings.back().vcn + mappings.back().length;
 
-                        if (last_vcn < att->Form.Nonresident.LowestVcn)
-                            mappings.emplace_back(0, last_vcn, att->Form.Nonresident.LowestVcn - last_vcn);
+                        if (last_vcn < att.Form.Nonresident.LowestVcn)
+                            mappings.emplace_back(0, last_vcn, att.Form.Nonresident.LowestVcn - last_vcn);
 
-                        read_nonresident_mappings(att, mappings2, cluster_size, vdl);
+                        read_nonresident_mappings(&att, mappings2, cluster_size, vdl);
 
                         mappings.splice(mappings.end(), mappings2);
                     }
@@ -1984,7 +1984,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                     // FIXME - check xattr_name not reserved
 
-                    if (att->Flags & ATTRIBUTE_FLAG_ENCRYPTED) {
+                    if (att.Flags & ATTRIBUTE_FLAG_ENCRYPTED) {
                         clear_line();
 
                         if (filename.empty())
@@ -1995,7 +1995,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         break;
                     }
 
-                    if (att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK) {
+                    if (att.Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK) {
                         clear_line();
 
                         if (filename.empty())
@@ -2010,18 +2010,18 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                     uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), (uint32_t)name2.length());
 
-                    if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
+                    if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
                         if (ads_name == "WofCompressedData") {
                             wof_compressed_data.resize(res_data.length());
                             memcpy(wof_compressed_data.data(), res_data.data(), res_data.length());
                         } else {
-                            if (att->Form.Resident.ValueLength > max_xattr_size) {
+                            if (att.Form.Resident.ValueLength > max_xattr_size) {
                                 clear_line();
 
                                 if (filename.empty())
                                     filename = f.get_filename();
 
-                                warnings.emplace_back(fmt::format("Skipping overly large ADS {}:{} ({} > {})", filename, ads_name, att->Form.Resident.ValueLength, max_xattr_size));
+                                warnings.emplace_back(fmt::format("Skipping overly large ADS {}:{} ({} > {})", filename, ads_name, att.Form.Resident.ValueLength, max_xattr_size));
 
                                 break;
                             }
@@ -2032,22 +2032,22 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             xattrs.emplace(name2, make_pair(hash, buf));
                         }
                     } else {
-                        if (att->Form.Nonresident.FileSize > max_xattr_size && ads_name != "WofCompressedData") {
+                        if (att.Form.Nonresident.FileSize > max_xattr_size && ads_name != "WofCompressedData") {
                             clear_line();
 
                             if (filename.empty())
                                 filename = f.get_filename();
 
-                            warnings.emplace_back(fmt::format("Skipping overly large ADS {}:{} ({} > {})", filename, ads_name, att->Form.Nonresident.FileSize, max_xattr_size));
+                            warnings.emplace_back(fmt::format("Skipping overly large ADS {}:{} ({} > {})", filename, ads_name, att.Form.Nonresident.FileSize, max_xattr_size));
 
                             break;
                         }
 
                         list<mapping> ads_mappings;
 
-                        read_nonresident_mappings(att, ads_mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
+                        read_nonresident_mappings(&att, ads_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
 
-                        buffer_t ads_data((size_t)sector_align(att->Form.Nonresident.FileSize, cluster_size));
+                        buffer_t ads_data((size_t)sector_align(att.Form.Nonresident.FileSize, cluster_size));
                         memset(ads_data.data(), 0, ads_data.size());
 
                         for (const auto& m : ads_mappings) {
@@ -2055,7 +2055,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             dev.read(ads_data.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
                         }
 
-                        ads_data.resize((size_t)att->Form.Nonresident.FileSize);
+                        ads_data.resize((size_t)att.Form.Nonresident.FileSize);
 
                         if (ads_name == "WofCompressedData")
                             wof_compressed_data.swap(ads_data);
@@ -2066,16 +2066,16 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             break;
 
             case ntfs_attribute::FILE_NAME: {
-                if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
+                if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
                     throw formatted_error("Error - FILE_NAME is non-resident"); // FIXME - can this happen?
 
-                if (att->Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]))
+                if (att.Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]))
                     throw formatted_error("FILE_NAME was truncated");
 
                 auto fn = reinterpret_cast<const FILE_NAME*>(res_data.data());
 
                 if (fn->Namespace != file_name_type::DOS) {
-                    if (att->Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]) + (fn->FileNameLength * sizeof(char16_t)))
+                    if (att.Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]) + (fn->FileNameLength * sizeof(char16_t)))
                         throw formatted_error("FILE_NAME was truncated");
 
                     auto name2 = convert.to_bytes(fn->FileName, fn->FileName + fn->FileNameLength);
@@ -2122,7 +2122,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             }
 
             case ntfs_attribute::SYMBOLIC_LINK:
-                if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
+                if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
                     throw formatted_error("Error - SYMBOLIC_LINK is non-resident"); // FIXME - can this happen?
 
                 reparse_point.resize(res_data.size());
@@ -2163,14 +2163,14 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             case ntfs_attribute::SECURITY_DESCRIPTOR: {
                 auto max_sd_size = (uint32_t)(tree_size - sizeof(tree_header) - sizeof(leaf_node) - offsetof(DIR_ITEM, name[0]) - sizeof(EA_NTACL) + 1);
 
-                if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
-                    if (att->Form.Resident.ValueLength > max_sd_size) {
+                if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
+                    if (att.Form.Resident.ValueLength > max_sd_size) {
                         clear_line();
 
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        warnings.emplace_back(fmt::format("Skipping overly large SD for {} ({} > {})", filename, att->Form.Resident.ValueLength, max_sd_size));
+                        warnings.emplace_back(fmt::format("Skipping overly large SD for {} ({} > {})", filename, att.Form.Resident.ValueLength, max_sd_size));
 
                         break;
                     }
@@ -2178,22 +2178,22 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     sd.resize(res_data.size());
                     memcpy(sd.data(), res_data.data(), res_data.size());
                 } else {
-                    if (att->Form.Nonresident.FileSize > max_sd_size) {
+                    if (att.Form.Nonresident.FileSize > max_sd_size) {
                         clear_line();
 
                         if (filename.empty())
                             filename = f.get_filename();
 
-                        warnings.emplace_back(fmt::format("Skipping overly large SD for {} ({} > {})", filename, att->Form.Nonresident.FileSize, max_sd_size));
+                        warnings.emplace_back(fmt::format("Skipping overly large SD for {} ({} > {})", filename, att.Form.Nonresident.FileSize, max_sd_size));
 
                         break;
                     }
 
                     list<mapping> sd_mappings;
 
-                    read_nonresident_mappings(att, sd_mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
+                    read_nonresident_mappings(&att, sd_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
 
-                    sd.resize((size_t)sector_align(att->Form.Nonresident.FileSize, cluster_size));
+                    sd.resize((size_t)sector_align(att.Form.Nonresident.FileSize, cluster_size));
                     memset(sd.data(), 0, sd.size());
 
                     for (const auto& m : sd_mappings) {
@@ -2201,7 +2201,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         dev.read(sd.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
                     }
 
-                    sd.resize((size_t)att->Form.Nonresident.FileSize);
+                    sd.resize((size_t)att.Form.Nonresident.FileSize);
                 }
 
                 break;

@@ -222,18 +222,18 @@ buffer_t ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute t
     buffer_t ret;
     bool found = false;
 
-    loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER* att, const string_view& res_data, const u16string_view& att_name) -> bool {
-        if (att->TypeCode != type || name != att_name)
+    loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view& res_data, const u16string_view& att_name) -> bool {
+        if (att.TypeCode != type || name != att_name)
             return true;
 
-        if (att->Flags & ATTRIBUTE_FLAG_ENCRYPTED)
+        if (att.Flags & ATTRIBUTE_FLAG_ENCRYPTED)
             throw formatted_error("Cannot read encrypted attribute");
 
-        if (att->Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK)
+        if (att.Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK)
             throw formatted_error("FIXME - handle reading compressed attribute"); // FIXME
 
-        if (att->FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-            ret = read_nonresident_attribute(offset, length, att);
+        if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
+            ret = read_nonresident_attribute(offset, length, &att);
         else {
             if (offset >= res_data.length())
                 ret.clear();
@@ -261,16 +261,16 @@ buffer_t ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute t
 list<mapping> ntfs_file::read_mappings(enum ntfs_attribute type, const u16string_view& name) {
     list<mapping> mappings;
 
-    loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER* att, const string_view&, const u16string_view& att_name) -> bool {
-        if (att->TypeCode != type || name != att_name)
+    loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view&, const u16string_view& att_name) -> bool {
+        if (att.TypeCode != type || name != att_name)
             return true;
 
-        if (att->FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM)
+        if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM)
             throw formatted_error("Attribute is resident");
 
         uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
 
-        read_nonresident_mappings(att, mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
+        read_nonresident_mappings(&att, mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
 
         return false;
     });
@@ -530,7 +530,7 @@ void populate_skip_list(ntfs& dev, uint64_t inode, list<uint64_t>& skiplist) {
     }, 0);
 }
 
-void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEADER*, const string_view&, const u16string_view&)>& func) {
+void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEADER&, const string_view&, const u16string_view&)>& func) {
     auto att = reinterpret_cast<const ATTRIBUTE_RECORD_HEADER*>((uint8_t*)file_record + file_record->FirstAttributeOffset);
     size_t offset = file_record->FirstAttributeOffset;
     buffer_t attlist;
@@ -584,7 +584,7 @@ void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEA
                                 if (att->NameLength != 0)
                                     name = u16string_view((char16_t*)((uint8_t*)file_record + offset + att->NameOffset), att->NameLength);
 
-                                if (!func(att, data, name))
+                                if (!func(*att, data, name))
                                     return;
 
                                 break;
@@ -643,7 +643,7 @@ void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEA
                                     if (att->NameLength != 0)
                                         name = u16string_view((char16_t*)((uint8_t*)oth.file_record + offset + att->NameOffset), att->NameLength);
 
-                                    if (!func(att, data, name))
+                                    if (!func(*att, data, name))
                                         return;
 
                                     break;
@@ -683,7 +683,7 @@ void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEA
         if (att->NameLength != 0)
             name = u16string_view((char16_t*)((uint8_t*)file_record + offset + att->NameOffset), att->NameLength);
 
-        if (!func(att, data, name))
+        if (!func(*att, data, name))
             return;
 
         offset += att->RecordLength;
@@ -698,8 +698,8 @@ string ntfs_file::get_filename() {
     do {
         uint64_t dir_num = 0;
 
-        f->loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER* att, const string_view& res_data, const u16string_view&) -> bool {
-            if (att->TypeCode != ntfs_attribute::FILE_NAME || att->FormCode != NTFS_ATTRIBUTE_FORM::RESIDENT_FORM)
+        f->loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view& res_data, const u16string_view&) -> bool {
+            if (att.TypeCode != ntfs_attribute::FILE_NAME || att.FormCode != NTFS_ATTRIBUTE_FORM::RESIDENT_FORM)
                 return true;
 
             auto fn = reinterpret_cast<const FILE_NAME*>(res_data.data());

@@ -393,7 +393,7 @@ public:
         return file_record->Flags & FILE_RECORD_IS_DIRECTORY;
     }
 
-    void loop_through_atts(const std::function<bool(const ATTRIBUTE_RECORD_HEADER*, const std::string_view&, const std::u16string_view&)>& func);
+    void loop_through_atts(const std::function<bool(const ATTRIBUTE_RECORD_HEADER&, const std::string_view&, const std::u16string_view&)>& func);
     std::string get_filename();
 
     FILE_RECORD_SEGMENT_HEADER* file_record;
