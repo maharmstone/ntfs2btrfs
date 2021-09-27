@@ -1909,7 +1909,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
     bool processed_data = false, processed_wof_data = false, skipping = false;
     uint16_t compression_unit = 0;
-    uint64_t vdl;
+    uint64_t vdl, wof_vdl;
     vector<string> warnings;
 
     static const uint32_t sector_size = 0x1000; // FIXME
@@ -2044,8 +2044,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         }
 
                         if (ads_name == "WofCompressedData") {
-                            if (!processed_wof_data)
+                            if (!processed_wof_data) {
                                 wof_compressed_data.resize(att.Form.Nonresident.FileSize);
+                                wof_vdl = att.Form.Nonresident.ValidDataLength;
+                            }
 
                             list<mapping> mappings2;
                             uint64_t last_vcn;
@@ -2058,7 +2060,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             if (last_vcn < att.Form.Nonresident.LowestVcn)
                                 wof_mappings.emplace_back(0, last_vcn, att.Form.Nonresident.LowestVcn - last_vcn);
 
-                            read_nonresident_mappings(att, mappings2, cluster_size, vdl);
+                            read_nonresident_mappings(att, mappings2, cluster_size, wof_vdl);
 
                             wof_mappings.splice(wof_mappings.end(), mappings2);
 
