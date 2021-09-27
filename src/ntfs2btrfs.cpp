@@ -1970,7 +1970,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         if (last_vcn < att.Form.Nonresident.LowestVcn)
                             mappings.emplace_back(0, last_vcn, att.Form.Nonresident.LowestVcn - last_vcn);
 
-                        read_nonresident_mappings(&att, mappings2, cluster_size, vdl);
+                        read_nonresident_mappings(att, mappings2, cluster_size, vdl);
 
                         mappings.splice(mappings.end(), mappings2);
                     }
@@ -2045,7 +2045,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                         list<mapping> ads_mappings;
 
-                        read_nonresident_mappings(&att, ads_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
+                        read_nonresident_mappings(att, ads_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
 
                         buffer_t ads_data((size_t)sector_align(att.Form.Nonresident.FileSize, cluster_size));
                         memset(ads_data.data(), 0, ads_data.size());
@@ -2191,7 +2191,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                     list<mapping> sd_mappings;
 
-                    read_nonresident_mappings(&att, sd_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
+                    read_nonresident_mappings(att, sd_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
 
                     sd.resize((size_t)sector_align(att.Form.Nonresident.FileSize, cluster_size));
                     memset(sd.data(), 0, sd.size());

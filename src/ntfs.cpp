@@ -81,10 +81,10 @@ ntfs_file::ntfs_file(ntfs& dev, uint64_t inode) : dev(dev), inode(inode) {
     process_fixups(&file_record->MultiSectorHeader, dev.file_record_size, dev.boot_sector->BytesPerSector);
 }
 
-void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER* att, list<mapping>& mappings,
+void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER& att, list<mapping>& mappings,
                                uint32_t cluster_size, uint64_t vdl) {
-    uint64_t next_vcn = att->Form.Nonresident.LowestVcn, current_lcn = 0, current_vcn;
-    uint8_t* stream = (uint8_t*)att + att->Form.Nonresident.MappingPairsOffset;
+    uint64_t next_vcn = att.Form.Nonresident.LowestVcn, current_lcn = 0, current_vcn;
+    uint8_t* stream = (uint8_t*)&att + att.Form.Nonresident.MappingPairsOffset;
     uint64_t max_cluster = vdl / cluster_size;
 
     if (vdl & (cluster_size - 1))
@@ -152,7 +152,7 @@ buffer_t ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length,
     list<mapping> mappings;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
 
-    read_nonresident_mappings(att, mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
+    read_nonresident_mappings(*att, mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
 
     // FIXME - do we need to check that mappings is contiguous and in order?
 
@@ -270,7 +270,7 @@ list<mapping> ntfs_file::read_mappings(enum ntfs_attribute type, const u16string
 
         uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
 
-        read_nonresident_mappings(&att, mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
+        read_nonresident_mappings(att, mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
 
         return false;
     });
