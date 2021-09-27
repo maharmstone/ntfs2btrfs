@@ -2503,12 +2503,15 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     if (!is_dir && !reparse_point.empty()) {
         inline_data = reparse_point;
         file_size = reparse_point.size();
+        vdl = inline_data.size();
     } else if (!symlink.empty()) {
         mappings.clear();
         file_size = symlink.size();
 
         inline_data.resize(symlink.size());
         memcpy(inline_data.data(), symlink.data(), symlink.size());
+
+        vdl = inline_data.size();
     }
 
     if (!is_dir)
