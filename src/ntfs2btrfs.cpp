@@ -1896,7 +1896,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                       bool nocsum) {
     INODE_ITEM ii;
     uint64_t file_size = 0;
-    list<mapping> mappings;
+    list<mapping> mappings, wof_mappings;
     wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
     vector<tuple<uint64_t, string>> links;
     buffer_t standard_info, sd, reparse_point, inline_data;
@@ -1907,7 +1907,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     string filename;
     buffer_t wof_compressed_data;
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-    bool processed_data = false, skipping = false;
+    bool processed_data = false, processed_wof_data = false, skipping = false;
     uint16_t compression_unit = 0;
     uint64_t vdl;
     vector<string> warnings;
@@ -2010,7 +2010,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                     uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), (uint32_t)name2.length());
 
-                    if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
+                    if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM && (ads_name != "WofCompressedData" || !processed_wof_data)) {
                         if (ads_name == "WofCompressedData") {
                             wof_compressed_data.resize(res_data.length());
                             memcpy(wof_compressed_data.data(), res_data.data(), res_data.length());
@@ -2043,24 +2043,43 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             break;
                         }
 
-                        list<mapping> ads_mappings;
+                        if (ads_name == "WofCompressedData") {
+                            if (!processed_wof_data)
+                                wof_compressed_data.resize(att.Form.Nonresident.FileSize);
 
-                        read_nonresident_mappings(att, ads_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
+                            list<mapping> mappings2;
+                            uint64_t last_vcn;
 
-                        buffer_t ads_data((size_t)sector_align(att.Form.Nonresident.FileSize, cluster_size));
-                        memset(ads_data.data(), 0, ads_data.size());
+                            if (wof_mappings.empty())
+                                last_vcn = 0;
+                            else
+                                last_vcn = wof_mappings.back().vcn + wof_mappings.back().length;
 
-                        for (const auto& m : ads_mappings) {
-                            dev.seek(m.lcn * cluster_size);
-                            dev.read(ads_data.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
-                        }
+                            if (last_vcn < att.Form.Nonresident.LowestVcn)
+                                wof_mappings.emplace_back(0, last_vcn, att.Form.Nonresident.LowestVcn - last_vcn);
 
-                        ads_data.resize((size_t)att.Form.Nonresident.FileSize);
+                            read_nonresident_mappings(att, mappings2, cluster_size, vdl);
 
-                        if (ads_name == "WofCompressedData")
-                            wof_compressed_data.swap(ads_data);
-                        else
+                            wof_mappings.splice(wof_mappings.end(), mappings2);
+
+                            processed_wof_data = true;
+                        } else {
+                            list<mapping> ads_mappings;
+
+                            read_nonresident_mappings(att, ads_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
+
+                            buffer_t ads_data((size_t)sector_align(att.Form.Nonresident.FileSize, cluster_size));
+                            memset(ads_data.data(), 0, ads_data.size());
+
+                            for (const auto& m : ads_mappings) {
+                                dev.seek(m.lcn * cluster_size);
+                                dev.read(ads_data.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
+                            }
+
+                            ads_data.resize((size_t)att.Form.Nonresident.FileSize);
+
                             xattrs.emplace(name2, make_pair(hash, ads_data));
+                        }
                     }
                 }
             break;
@@ -2226,6 +2245,20 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     if (links.empty())
         return; // don't create orphaned inodes
+
+    if (!wof_mappings.empty()) {
+        auto len = wof_compressed_data.size();
+
+        wof_compressed_data.resize(sector_align(len, cluster_size));
+        memset(wof_compressed_data.data(), 0, wof_compressed_data.size());
+
+        for (const auto& m : wof_mappings) {
+            dev.seek(m.lcn * cluster_size);
+            dev.read(wof_compressed_data.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
+        }
+
+        wof_compressed_data.resize(len);
+    }
 
     if (compression_unit != 0) {
         uint64_t cus = 1ull << compression_unit;
