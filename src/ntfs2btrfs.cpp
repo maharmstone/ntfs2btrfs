@@ -2045,7 +2045,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                 auto fn = reinterpret_cast<const FILE_NAME*>(res_data.data());
 
-                if (fn->Namespace != FILE_NAME_DOS) {
+                if (fn->Namespace != file_name_type::DOS) {
                     if (att->Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]) + (fn->FileNameLength * sizeof(char16_t)))
                         throw formatted_error("FILE_NAME was truncated");
 

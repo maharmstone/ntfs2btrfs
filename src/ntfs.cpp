@@ -704,7 +704,7 @@ string ntfs_file::get_filename() {
 
             auto fn = reinterpret_cast<const FILE_NAME*>(res_data.data());
 
-            if (fn->Namespace == FILE_NAME_DOS)
+            if (fn->Namespace == file_name_type::DOS)
                 return true;
 
             if (fn->Parent.SegmentNumber != NTFS_ROOT_DIR_INODE)

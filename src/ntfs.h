@@ -191,6 +191,13 @@ typedef struct {
 
 // https://flatcap.org/linux-ntfs/ntfs/attributes/file_name.html
 
+enum class file_name_type : uint8_t {
+    POSIX = 0,
+    WIN32 = 1,
+    DOS = 2,
+    WIN32_AND_DOS = 3
+};
+
 typedef struct {
     MFT_SEGMENT_REFERENCE Parent;
     int64_t CreationTime;
@@ -202,14 +209,9 @@ typedef struct {
     uint32_t FileAttributes;
     uint32_t EaSize;
     uint8_t FileNameLength;
-    uint8_t Namespace;
+    file_name_type Namespace;
     char16_t FileName[1];
 } FILE_NAME;
-
-#define FILE_NAME_POSIX         0
-#define FILE_NAME_WIN32         1
-#define FILE_NAME_DOS           2
-#define FILE_NAME_WIN32_AND_DOS 3
 
 // https://flatcap.org/linux-ntfs/ntfs/concepts/node_header.html
 
