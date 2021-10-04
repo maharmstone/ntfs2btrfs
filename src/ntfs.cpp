@@ -181,6 +181,9 @@ buffer_t ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length,
             else
                 buf_end = length;
 
+            if (buf_end == buf_start)
+                continue;
+
             read_start = m.lcn * cluster_size;
 
             if (offset > m.vcn * cluster_size)
