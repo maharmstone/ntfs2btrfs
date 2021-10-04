@@ -57,6 +57,10 @@ endif()
 
 add_executable(ntfs2btrfs ${SRC_FILES})
 
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+    add_definitions(-D_GLIBCXX_DEBUG)
+endif()
+
 target_link_libraries(ntfs2btrfs fmt::fmt-header-only)
 
 if(WITH_ZLIB)
