@@ -2275,10 +2275,82 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     // FIXME - form user.EA xattr from EAs we don't recognize
 
+    memset(&ii, 0, sizeof(INODE_ITEM));
+
+    optional<uint32_t> mode;
+    uint8_t item_type = BTRFS_TYPE_UNKNOWN;
+
     for (const auto& ea : eas) {
         const auto& n = ea.first;
+        const auto& v = ea.second;
 
-        if (n != "$KERNEL.PURGE.APPXFICACHE" && n != "$KERNEL.PURGE.ESBCACHE" && n != "$CI.CATALOGHINT")
+        if (n == "$LXUID") {
+            if (v.size() != sizeof(uint32_t)) {
+                add_warning("$LXUID EA was {} bytes, expected {}", v.size(), sizeof(uint32_t));
+                continue;
+            }
+
+            ii.st_uid = *(uint32_t*)v.data();
+        } else if (n == "$LXGID") {
+            if (v.size() != sizeof(uint32_t)) {
+                add_warning("$LXGID EA was {} bytes, expected {}", v.size(), sizeof(uint32_t));
+                continue;
+            }
+
+            ii.st_gid = *(uint32_t*)v.data();
+        } else if (n == "$LXMOD") {
+            if (v.size() != sizeof(uint32_t)) {
+                add_warning("$LXMOD EA was {} bytes, expected {}", v.size(), sizeof(uint32_t));
+                continue;
+            }
+
+            mode = *(uint32_t*)v.data();
+
+            auto& m = mode.value();
+
+            if (is_dir && !__S_ISTYPE(m, __S_IFDIR)) {
+                add_warning("$LXMOD did not have S_IFDIR set, setting.");
+                m &= ~__S_IFMT;
+                m |= __S_IFDIR;
+            } else if (!is_dir && __S_ISTYPE(m, __S_IFDIR)) {
+                add_warning("$LXMOD had S_IFDIR set, clearing.");
+                m &= ~__S_IFMT;
+                m |= __S_IFREG;
+            }
+
+            switch (m & __S_IFMT) {
+                case __S_IFREG:
+                    item_type = BTRFS_TYPE_FILE;
+                    break;
+
+                case __S_IFDIR:
+                    item_type = BTRFS_TYPE_DIRECTORY;
+                    break;
+
+                case __S_IFCHR:
+                    item_type = BTRFS_TYPE_CHARDEV;
+                    break;
+
+                case __S_IFBLK:
+                    item_type = BTRFS_TYPE_BLOCKDEV;
+                    break;
+
+                case __S_IFIFO:
+                    item_type = BTRFS_TYPE_FIFO;
+                    break;
+
+                case __S_IFSOCK:
+                    item_type = BTRFS_TYPE_SOCKET;
+                    break;
+
+                case __S_IFLNK:
+                    item_type = BTRFS_TYPE_SYMLINK;
+                    break;
+
+                default:
+                    add_warning("Unrecognized inode type {:o}.", m & __S_IFMT);
+            }
+        } else if (n != "$KERNEL.PURGE.APPXFICACHE" && n != "$KERNEL.PURGE.ESBCACHE" && n != "$CI.CATALOGHINT")
             add_warning("Unrecognized EA {}", ea.first);
     }
 
@@ -2372,8 +2444,6 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     for (const auto& w : warnings) {
         fmt::print(stderr, "{}\n", w);
     }
-
-    memset(&ii, 0, sizeof(INODE_ITEM));
 
     const auto& si = *(const STANDARD_INFORMATION*)standard_info.data();
 
@@ -2521,21 +2591,22 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     ii.st_nlink = (uint32_t)links.size();
 
-    if (is_dir)
-        ii.st_mode = __S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
-    else
-        ii.st_mode = __S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    if (mode.has_value())
+        ii.st_mode = mode.value();
+    else {
+        if (is_dir)
+            ii.st_mode = __S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+        else
+            ii.st_mode = __S_IFREG | S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
-    if (!symlink.empty())
-        ii.st_mode |= __S_IFLNK;
+        if (!symlink.empty())
+            ii.st_mode |= __S_IFLNK;
+    }
 
     ii.sequence = 1;
 
     if (nocsum && !is_dir)
         ii.flags = BTRFS_INODE_NODATACOW | BTRFS_INODE_NODATASUM;
-
-    // FIXME - xattrs (EAs, etc.)
-    // FIXME - LXSS
 
     if (!mappings.empty()) {
         buffer_t buf(offsetof(EXTENT_DATA, data[0]) + sizeof(EXTENT_DATA2));
@@ -2769,22 +2840,20 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     add_item(r, inode, TYPE_INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
 
-    {
-        uint8_t type;
-
+    if (item_type == BTRFS_TYPE_UNKNOWN) {
         if (is_dir)
-            type = BTRFS_TYPE_DIRECTORY;
+            item_type = BTRFS_TYPE_DIRECTORY;
         else if (!symlink.empty())
-            type = BTRFS_TYPE_SYMLINK;
+            item_type = BTRFS_TYPE_SYMLINK;
         else
-            type = BTRFS_TYPE_FILE;
+            item_type = BTRFS_TYPE_FILE;
+    }
 
-        for (const auto& l : links) {
-            if (get<0>(l) == NTFS_ROOT_DIR_INODE)
-                link_inode(r, inode, SUBVOL_ROOT_INODE, get<1>(l), type);
-            else
-                link_inode(r, inode, get<0>(l) + inode_offset, get<1>(l), type);
-        }
+    for (const auto& l : links) {
+        if (get<0>(l) == NTFS_ROOT_DIR_INODE)
+            link_inode(r, inode, SUBVOL_ROOT_INODE, get<1>(l), item_type);
+        else
+            link_inode(r, inode, get<0>(l) + inode_offset, get<1>(l), item_type);
     }
 
     if (!sd.empty()) {
