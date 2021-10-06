@@ -3373,9 +3373,12 @@ static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_cs
     while (!runs.empty() && (runs.rbegin()->second.back().offset * cluster_size) + runs.rbegin()->second.back().length > device_size) {
         auto& r = runs.rbegin()->second;
 
-        if (r.back().offset * cluster_size >= orig_device_size)
+        if (r.back().offset * cluster_size >= orig_device_size) {
             r.pop_back();
-        else {
+
+            if (r.empty())
+                runs.erase(prev(runs.end()));
+        } else {
             uint64_t len = orig_device_size - (r.back().offset * cluster_size);
 
             if (len % cluster_size)
