@@ -2214,12 +2214,25 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             }
 
             case ntfs_attribute::EA: {
-                if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM) {
-                    add_warning("FIXME non-resident EA");
-                    break;
-                }
+                buffer_t eabuf;
+                string_view sv;
 
-                auto sv = res_data;
+                if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM) {
+                    list<mapping> ea_mappings;
+
+                    read_nonresident_mappings(att, ea_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
+
+                    eabuf.resize((size_t)sector_align(att.Form.Nonresident.FileSize, cluster_size));
+                    memset(eabuf.data(), 0, eabuf.size());
+
+                    for (const auto& m : ea_mappings) {
+                        dev.seek(m.lcn * cluster_size);
+                        dev.read(eabuf.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
+                    }
+
+                    sv = string_view((char*)eabuf.data(), (size_t)att.Form.Nonresident.FileSize);
+                } else
+                    sv = res_data;
 
                 do {
                     auto& ead = *(ea_data*)sv.data();
