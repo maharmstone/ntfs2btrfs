@@ -85,6 +85,9 @@ static const char chunk_error_message[] = "Could not find enough space to create
 #define EA_REPARSE "user.reparse"
 #define EA_REPARSE_HASH 0xfabad1fe
 
+#define EA_CAP "security.capability"
+#define EA_CAP_HASH 0x7c3650b1
+
 using runs_t = map<uint64_t, list<data_alloc>>;
 
 static void space_list_remove(list<space>& space_list, uint64_t offset, uint64_t length) {
@@ -2412,6 +2415,23 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             ii.st_ctime.nanoseconds = l.ctime_ns;
 
             has_lxattrb = true;
+        } else if (n == "LX.SECURITY.CAPABILITY") {
+            static const string_view lxea = "lxea";
+
+            if (v.size() < lxea.length()) {
+                add_warning("LX.SECURITY.CAPABILITY EA was {} bytes, expected at least {}", v.size(), lxea.length());
+                continue;
+            }
+
+            if (string_view((char*)v.data(), lxea.length()) != lxea) {
+                add_warning("LX.SECURITY.CAPABILITY EA prefix was not \"{}\"", lxea);
+                continue;
+            }
+
+            buffer_t v2(v.size() - lxea.length());
+            memcpy(v2.data(), v.data() + lxea.length(), v2.size());
+
+            xattrs.emplace(EA_CAP, make_pair(EA_CAP_HASH, v2));
         } else if (n != "$KERNEL.PURGE.APPXFICACHE" && n != "$KERNEL.PURGE.ESBCACHE" && n != "$CI.CATALOGHINT" &&
                    n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASE" && n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASEEX1" &&
                    n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.EPOCHEA") {
