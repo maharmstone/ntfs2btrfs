@@ -2273,8 +2273,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     if (links.empty())
         return; // don't create orphaned inodes
 
+    // FIXME - form user.EA xattr from EAs we don't recognize
+
     for (const auto& ea : eas) {
-        add_warning("FIXME - EA {}", ea.first);
+        const auto& n = ea.first;
+
+        if (n != "$KERNEL.PURGE.APPXFICACHE" && n != "$KERNEL.PURGE.ESBCACHE" && n != "$CI.CATALOGHINT")
+            add_warning("Unrecognized EA {}", ea.first);
     }
 
     if (!wof_mappings.empty()) {
