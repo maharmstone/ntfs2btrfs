@@ -1921,6 +1921,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     is_dir = f.is_directory();
 
+    auto add_warning = [&]<typename... Args>(const string_view& msg, Args&&... args) {
+        if (filename.empty())
+            filename = f.get_filename();
+
+        warnings.emplace_back(filename + ": " + fmt::format(msg, std::forward<Args>(args)...));
+    };
+
     f.loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view& res_data, const u16string_view& name) -> bool {
         switch (att.TypeCode) {
             case ntfs_attribute::STANDARD_INFORMATION:
@@ -1985,24 +1992,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     // FIXME - check xattr_name not reserved
 
                     if (att.Flags & ATTRIBUTE_FLAG_ENCRYPTED) {
-                        clear_line();
-
-                        if (filename.empty())
-                            filename = f.get_filename();
-
-                        warnings.emplace_back(fmt::format("Skipping encrypted ADS {}:{}", filename, ads_name));
-
+                        add_warning("Skipping encrypted ADS :{}", ads_name);
                         break;
                     }
 
                     if (att.Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK) {
-                        clear_line();
-
-                        if (filename.empty())
-                            filename = f.get_filename();
-
-                        warnings.emplace_back(fmt::format("Skipping compressed ADS {}:{}", filename, ads_name)); // FIXME
-
+                        add_warning("Skipping compressed ADS :{}", ads_name); // FIXME
                         break;
                     }
 
@@ -2016,13 +2011,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             memcpy(wof_compressed_data.data(), res_data.data(), res_data.length());
                         } else {
                             if (att.Form.Resident.ValueLength > max_xattr_size) {
-                                clear_line();
-
-                                if (filename.empty())
-                                    filename = f.get_filename();
-
-                                warnings.emplace_back(fmt::format("Skipping overly large ADS {}:{} ({} > {})", filename, ads_name, att.Form.Resident.ValueLength, max_xattr_size));
-
+                                add_warning("Skipping overly large ADS :{} ({} > {})", ads_name, att.Form.Resident.ValueLength, max_xattr_size);
                                 break;
                             }
 
@@ -2033,13 +2022,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                         }
                     } else {
                         if (att.Form.Nonresident.FileSize > max_xattr_size && ads_name != "WofCompressedData") {
-                            clear_line();
-
-                            if (filename.empty())
-                                filename = f.get_filename();
-
-                            warnings.emplace_back(fmt::format("Skipping overly large ADS {}:{} ({} > {})", filename, ads_name, att.Form.Nonresident.FileSize, max_xattr_size));
-
+                            add_warning("Skipping overly large ADS :{} ({} > {})", ads_name, att.Form.Nonresident.FileSize, max_xattr_size);
                             break;
                         }
 
@@ -2102,15 +2085,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     auto name2 = convert.to_bytes(fn->FileName, fn->FileName + fn->FileNameLength);
 
                     if (name2.length() > 255) {
-                        if (filename.empty())
-                            filename = f.get_filename();
-
                         // FIXME - make sure no collision with existing file
 
                         name2 = name2.substr(0, 255);
                         fix_truncated_utf8(name2);
 
-                        warnings.emplace_back(fmt::format("{}: Name was too long, truncating to {}.", filename, name2));
+                        add_warning("Name was too long, truncating to {}.", name2);
                     }
 
                     uint64_t parent = fn->Parent.SegmentNumber;
@@ -2158,13 +2138,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                 if (reparse_point.size() < offsetof(REPARSE_DATA_BUFFER, Reserved) ||
                     reparse_point.size() < rpb.ReparseDataLength + offsetof(REPARSE_DATA_BUFFER, GenericReparseBuffer.DataBuffer)) {
-                    clear_line();
-
-                    if (filename.empty())
-                        filename = f.get_filename();
-
-                    warnings.emplace_back(fmt::format("Reparse point buffer of {} was truncated.", filename));
-
+                    add_warning("Reparse point buffer was truncated.");
                     break;
                 }
 
@@ -2176,12 +2150,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                             (len < offsetof(REPARSE_DATA_BUFFER, SymbolicLinkReparseBuffer.PathBuffer) +
                                             rpb.SymbolicLinkReparseBuffer.PrintNameOffset +
                                             rpb.SymbolicLinkReparseBuffer.PrintNameLength)) {
-                            clear_line();
-
-                            if (filename.empty())
-                                filename = f.get_filename();
-
-                            warnings.emplace_back(fmt::format("Symlink reparse point buffer of {} was truncated.", filename));
+                            add_warning("Symlink reparse point buffer was truncated.");
                         } else if (rpb.SymbolicLinkReparseBuffer.Flags & SYMLINK_FLAG_RELATIVE) {
                             symlink = convert.to_bytes(&rpb.SymbolicLinkReparseBuffer.PathBuffer[rpb.SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(char16_t)],
                                                        &rpb.SymbolicLinkReparseBuffer.PathBuffer[(rpb.SymbolicLinkReparseBuffer.PrintNameOffset + rpb.SymbolicLinkReparseBuffer.PrintNameLength) / sizeof(char16_t)]);
@@ -2196,14 +2165,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     break;
 
                     case IO_REPARSE_TAG_LX_SYMLINK:
-                        if (len < offsetof(REPARSE_DATA_BUFFER, LxSymlink.name)) {
-                            clear_line();
-
-                            if (filename.empty())
-                                filename = f.get_filename();
-
-                            warnings.emplace_back(fmt::format("LXSS reparse point buffer of {} was truncated.", filename));
-                        } else {
+                        if (len < offsetof(REPARSE_DATA_BUFFER, LxSymlink.name))
+                            add_warning("LXSS reparse point buffer was truncated.");
+                        else {
                             symlink = string_view(rpb.LxSymlink.name, len - offsetof(REPARSE_DATA_BUFFER, LxSymlink.name));
                             reparse_point.clear();
                         }
@@ -2218,13 +2182,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                 if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
                     if (att.Form.Resident.ValueLength > max_sd_size) {
-                        clear_line();
-
-                        if (filename.empty())
-                            filename = f.get_filename();
-
-                        warnings.emplace_back(fmt::format("Skipping overly large SD for {} ({} > {})", filename, att.Form.Resident.ValueLength, max_sd_size));
-
+                        add_warning("Skipping overly large SD ({} > {})", att.Form.Resident.ValueLength, max_sd_size);
                         break;
                     }
 
@@ -2232,13 +2190,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     memcpy(sd.data(), res_data.data(), res_data.size());
                 } else {
                     if (att.Form.Nonresident.FileSize > max_sd_size) {
-                        clear_line();
-
-                        if (filename.empty())
-                            filename = f.get_filename();
-
-                        warnings.emplace_back(fmt::format("Skipping overly large SD for {} ({} > {})", filename, att.Form.Nonresident.FileSize, max_sd_size));
-
+                        add_warning("Skipping overly large SD ({} > {})", att.Form.Nonresident.FileSize, max_sd_size);
                         break;
                     }
 
