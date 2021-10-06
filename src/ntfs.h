@@ -460,6 +460,11 @@ typedef struct {
     char EaName[1];
 } ea_data;
 
+typedef struct {
+    uint32_t major;
+    uint32_t minor;
+} lxdev;
+
 #pragma pack(pop)
 
 class ntfs;

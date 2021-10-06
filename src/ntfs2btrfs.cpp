@@ -2363,6 +2363,20 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 default:
                     add_warning("Unrecognized inode type {:o}.", m & __S_IFMT);
             }
+        } else if (n == "$LXDEV") {
+            if (v.size() != sizeof(lxdev)) {
+                add_warning("$LXDEV EA was {} bytes, expected {}", v.size(), sizeof(lxdev));
+                continue;
+            }
+
+            const auto& d = *(lxdev*)v.data();
+
+            if (d.minor >= 0x100000) {
+                add_warning("minor value {} is too large for Btrfs", d.minor);
+                continue;
+            }
+
+            ii.st_rdev = (d.major << 20) | (d.minor & 0xfffff);
         } else if (n != "$KERNEL.PURGE.APPXFICACHE" && n != "$KERNEL.PURGE.ESBCACHE" && n != "$CI.CATALOGHINT" &&
                    n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASE" && n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASEEX1" &&
                    n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.EPOCHEA") {
