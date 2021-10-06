@@ -1911,6 +1911,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     uint16_t compression_unit = 0;
     uint64_t vdl, wof_vdl;
     vector<string> warnings;
+    map<string, buffer_t> eas;
 
     static const uint32_t sector_size = 0x1000; // FIXME
 
@@ -2212,6 +2213,46 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 break;
             }
 
+            case ntfs_attribute::EA: {
+                if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM) {
+                    add_warning("FIXME non-resident EA");
+                    break;
+                }
+
+                auto sv = res_data;
+
+                do {
+                    auto& ead = *(ea_data*)sv.data();
+
+                    if (sv.length() < offsetof(ea_data, EaName)) {
+                        add_warning("truncated EA ({} bytes, expected at least {})", sv.length(), offsetof(ea_data, EaName));
+                        break;
+                    }
+
+                    if (ead.NextEntryOffset > sv.length()) {
+                        add_warning("truncated EA ({} > {})", ead.NextEntryOffset, sv.length());
+                        break;
+                    }
+
+                    if (offsetof(ea_data, EaName) + ead.EaNameLength + 1 + ead.EaValueLength > ead.NextEntryOffset) {
+                        add_warning("EA overflow ({} + {} + 1 + {} > {})", offsetof(ea_data, EaName), ead.EaNameLength,
+                                    ead.EaValueLength, ead.NextEntryOffset);
+                        break;
+                    }
+
+                    auto ea_name = string_view(ead.EaName, ead.EaNameLength);
+                    buffer_t ea_value(ead.EaValueLength);
+
+                    memcpy(ea_value.data(), &ead.EaName[ead.EaNameLength + 1], ea_value.size());
+
+                    eas.emplace(ea_name, move(ea_value));
+
+                    sv = sv.substr(ead.NextEntryOffset);
+                } while (!sv.empty());
+
+                break;
+            }
+
             default:
             break;
         }
@@ -2231,6 +2272,10 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     if (links.empty())
         return; // don't create orphaned inodes
+
+    for (const auto& ea : eas) {
+        add_warning("FIXME - EA {}", ea.first);
+    }
 
     if (!wof_mappings.empty()) {
         auto len = wof_compressed_data.size();

@@ -450,6 +450,16 @@ typedef struct {
     uint32_t Algorithm;
 } file_provider_external_info_v0; // FILE_PROVIDER_EXTERNAL_INFO_V0 in winioctl.h
 
+// cf. https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_file_full_ea_information
+
+typedef struct {
+    uint32_t NextEntryOffset;
+    uint8_t Flags;
+    uint8_t EaNameLength;
+    uint16_t EaValueLength;
+    char EaName[1];
+} ea_data;
+
 #pragma pack(pop)
 
 class ntfs;
