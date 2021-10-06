@@ -465,6 +465,23 @@ typedef struct {
     uint32_t minor;
 } lxdev;
 
+// https://dfir.ru/2019/01/19/ntfs-today/
+
+typedef struct {
+    uint16_t format;
+    uint16_t version;
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+    uint32_t rdev;
+    uint32_t atime_ns;
+    uint32_t mtime_ns;
+    uint32_t ctime_ns;
+    uint64_t atime;
+    uint64_t mtime;
+    uint64_t ctime;
+} lxattrb;
+
 #pragma pack(pop)
 
 class ntfs;

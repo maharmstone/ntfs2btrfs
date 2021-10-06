@@ -2292,6 +2292,52 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     optional<uint32_t> mode;
     uint8_t item_type = BTRFS_TYPE_UNKNOWN;
+    bool has_lxattrb = false;
+
+    auto set_mode = [&](uint32_t& m) {
+        if (is_dir && !__S_ISTYPE(m, __S_IFDIR)) {
+            add_warning("st_mode did not have S_IFDIR set, setting.");
+            m &= ~__S_IFMT;
+            m |= __S_IFDIR;
+        } else if (!is_dir && __S_ISTYPE(m, __S_IFDIR)) {
+            add_warning("st_mode had S_IFDIR set, clearing.");
+            m &= ~__S_IFMT;
+            m |= __S_IFREG;
+        }
+
+        switch (m & __S_IFMT) {
+            case __S_IFREG:
+                item_type = BTRFS_TYPE_FILE;
+                break;
+
+            case __S_IFDIR:
+                item_type = BTRFS_TYPE_DIRECTORY;
+                break;
+
+            case __S_IFCHR:
+                item_type = BTRFS_TYPE_CHARDEV;
+                break;
+
+            case __S_IFBLK:
+                item_type = BTRFS_TYPE_BLOCKDEV;
+                break;
+
+            case __S_IFIFO:
+                item_type = BTRFS_TYPE_FIFO;
+                break;
+
+            case __S_IFSOCK:
+                item_type = BTRFS_TYPE_SOCKET;
+                break;
+
+            case __S_IFLNK:
+                item_type = BTRFS_TYPE_SYMLINK;
+                break;
+
+            default:
+                add_warning("Unrecognized inode type {:o}.", m & __S_IFMT);
+        }
+    };
 
     for (const auto& ea : eas) {
         const auto& n = ea.first;
@@ -2319,50 +2365,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
             mode = *(uint32_t*)v.data();
 
-            auto& m = mode.value();
-
-            if (is_dir && !__S_ISTYPE(m, __S_IFDIR)) {
-                add_warning("$LXMOD did not have S_IFDIR set, setting.");
-                m &= ~__S_IFMT;
-                m |= __S_IFDIR;
-            } else if (!is_dir && __S_ISTYPE(m, __S_IFDIR)) {
-                add_warning("$LXMOD had S_IFDIR set, clearing.");
-                m &= ~__S_IFMT;
-                m |= __S_IFREG;
-            }
-
-            switch (m & __S_IFMT) {
-                case __S_IFREG:
-                    item_type = BTRFS_TYPE_FILE;
-                    break;
-
-                case __S_IFDIR:
-                    item_type = BTRFS_TYPE_DIRECTORY;
-                    break;
-
-                case __S_IFCHR:
-                    item_type = BTRFS_TYPE_CHARDEV;
-                    break;
-
-                case __S_IFBLK:
-                    item_type = BTRFS_TYPE_BLOCKDEV;
-                    break;
-
-                case __S_IFIFO:
-                    item_type = BTRFS_TYPE_FIFO;
-                    break;
-
-                case __S_IFSOCK:
-                    item_type = BTRFS_TYPE_SOCKET;
-                    break;
-
-                case __S_IFLNK:
-                    item_type = BTRFS_TYPE_SYMLINK;
-                    break;
-
-                default:
-                    add_warning("Unrecognized inode type {:o}.", m & __S_IFMT);
-            }
+            set_mode(mode.value());
         } else if (n == "$LXDEV") {
             if (v.size() != sizeof(lxdev)) {
                 add_warning("$LXDEV EA was {} bytes, expected {}", v.size(), sizeof(lxdev));
@@ -2377,6 +2380,38 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             }
 
             ii.st_rdev = (d.major << 20) | (d.minor & 0xfffff);
+        } else if (n == "LXATTRB") {
+            if (v.size() != sizeof(lxattrb)) {
+                add_warning("LXATTRB EA was {} bytes, expected {}", v.size(), sizeof(lxattrb));
+                continue;
+            }
+
+            const auto& l = *(lxattrb*)v.data();
+
+            if (l.format != 0) {
+                add_warning("LXATTRB format was {}, expected 0", l.format);
+                continue;
+            }
+
+            if (l.version != 1) {
+                add_warning("LXATTRB version was {}, expected 1", l.version);
+                continue;
+            }
+
+            mode = l.mode;
+            set_mode(mode.value());
+
+            ii.st_uid = l.uid;
+            ii.st_gid = l.gid;
+            ii.st_rdev = l.rdev;
+            ii.st_atime.seconds = l.atime;
+            ii.st_atime.nanoseconds = l.atime_ns;
+            ii.st_mtime.seconds = l.mtime;
+            ii.st_mtime.nanoseconds = l.mtime_ns;
+            ii.st_ctime.seconds = l.ctime;
+            ii.st_ctime.nanoseconds = l.ctime_ns;
+
+            has_lxattrb = true;
         } else if (n != "$KERNEL.PURGE.APPXFICACHE" && n != "$KERNEL.PURGE.ESBCACHE" && n != "$CI.CATALOGHINT" &&
                    n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASE" && n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASEEX1" &&
                    n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.EPOCHEA") {
@@ -2504,9 +2539,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     if (standard_info.size() >= offsetof(STANDARD_INFORMATION, OwnerId)) {
         ii.otime = win_time_to_unix(si.CreationTime);
-        ii.st_atime = win_time_to_unix(si.LastAccessTime);
-        ii.st_mtime = win_time_to_unix(si.LastWriteTime);
-        ii.st_ctime = win_time_to_unix(si.ChangeTime);
+
+        if (!has_lxattrb) {
+            ii.st_atime = win_time_to_unix(si.LastAccessTime);
+            ii.st_mtime = win_time_to_unix(si.LastWriteTime);
+            ii.st_ctime = win_time_to_unix(si.ChangeTime);
+        }
     }
 
     if (sd.empty() && standard_info.size() >= offsetof(STANDARD_INFORMATION, QuotaCharged)) {
