@@ -1136,7 +1136,7 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
         di.transid = 1;
         di.m = 0;
         di.n = sizeof(subvol_name) - 1;
-        di.type = BTRFS_TYPE_DIRECTORY;
+        di.type = btrfs_inode_type::directory;
         memcpy(di.name, subvol_name, sizeof(subvol_name) - 1);
 
         auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)subvol_name, sizeof(subvol_name) - 1);
@@ -1201,7 +1201,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode,
         di.transid = 1;
         di.m = 0;
         di.n = sizeof(image_filename) - 1;
-        di.type = BTRFS_TYPE_FILE;
+        di.type = btrfs_inode_type::file;
         memcpy(di.name, image_filename, sizeof(image_filename) - 1);
 
         auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)image_filename, sizeof(image_filename) - 1);
@@ -1499,7 +1499,8 @@ static BTRFS_TIME win_time_to_unix(int64_t time) {
     return bt;
 }
 
-static void link_inode(root& r, uint64_t inode, uint64_t dir, const string_view& name, uint8_t type) {
+static void link_inode(root& r, uint64_t inode, uint64_t dir, const string_view& name,
+                       enum btrfs_inode_type type) {
     uint64_t seq;
 
     // add DIR_ITEM and DIR_INDEX
@@ -1807,7 +1808,7 @@ static void set_xattr(root& r, uint64_t inode, const string_view& name, uint32_t
     di.transid = 1;
     di.m = (uint16_t)data.size();
     di.n = (uint16_t)name.size();
-    di.type = BTRFS_TYPE_EA;
+    di.type = btrfs_inode_type::ea;
     memcpy(di.name, name.data(), name.size());
     memcpy(di.name + name.size(), data.data(), data.size());
 
@@ -2294,7 +2295,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     memset(&ii, 0, sizeof(INODE_ITEM));
 
     optional<uint32_t> mode;
-    uint8_t item_type = BTRFS_TYPE_UNKNOWN;
+    enum btrfs_inode_type item_type = btrfs_inode_type::unknown;
     bool has_lxattrb = false;
 
     auto set_mode = [&](uint32_t& m) {
@@ -2310,31 +2311,31 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
         switch (m & __S_IFMT) {
             case __S_IFREG:
-                item_type = BTRFS_TYPE_FILE;
+                item_type = btrfs_inode_type::file;
                 break;
 
             case __S_IFDIR:
-                item_type = BTRFS_TYPE_DIRECTORY;
+                item_type = btrfs_inode_type::directory;
                 break;
 
             case __S_IFCHR:
-                item_type = BTRFS_TYPE_CHARDEV;
+                item_type = btrfs_inode_type::chardev;
                 break;
 
             case __S_IFBLK:
-                item_type = BTRFS_TYPE_BLOCKDEV;
+                item_type = btrfs_inode_type::blockdev;
                 break;
 
             case __S_IFIFO:
-                item_type = BTRFS_TYPE_FIFO;
+                item_type = btrfs_inode_type::fifo;
                 break;
 
             case __S_IFSOCK:
-                item_type = BTRFS_TYPE_SOCKET;
+                item_type = btrfs_inode_type::socket;
                 break;
 
             case __S_IFLNK:
-                item_type = BTRFS_TYPE_SYMLINK;
+                item_type = btrfs_inode_type::symlink;
                 break;
 
             default:
@@ -2928,13 +2929,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     add_item(r, inode, TYPE_INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
 
-    if (item_type == BTRFS_TYPE_UNKNOWN) {
+    if (item_type == btrfs_inode_type::unknown) {
         if (is_dir)
-            item_type = BTRFS_TYPE_DIRECTORY;
+            item_type = btrfs_inode_type::directory;
         else if (!symlink.empty())
-            item_type = BTRFS_TYPE_SYMLINK;
+            item_type = btrfs_inode_type::symlink;
         else
-            item_type = BTRFS_TYPE_FILE;
+            item_type = btrfs_inode_type::file;
     }
 
     for (const auto& l : links) {
@@ -3438,7 +3439,7 @@ static void populate_root_root(root& root_root) {
     di.transid = 0;
     di.m = 0;
     di.n = sizeof(default_subvol) - 1;
-    di.type = BTRFS_TYPE_DIRECTORY;
+    di.type = btrfs_inode_type::directory;
     memcpy(di.name, default_subvol, sizeof(default_subvol) - 1);
 
     add_item_move(root_root, BTRFS_ROOT_TREEDIR, TYPE_DIR_ITEM, default_hash, buf);

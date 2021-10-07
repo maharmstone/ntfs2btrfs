@@ -257,22 +257,24 @@ typedef struct {
     uint8_t reserved2[565];
 } superblock;
 
-#define BTRFS_TYPE_UNKNOWN   0
-#define BTRFS_TYPE_FILE      1
-#define BTRFS_TYPE_DIRECTORY 2
-#define BTRFS_TYPE_CHARDEV   3
-#define BTRFS_TYPE_BLOCKDEV  4
-#define BTRFS_TYPE_FIFO      5
-#define BTRFS_TYPE_SOCKET    6
-#define BTRFS_TYPE_SYMLINK   7
-#define BTRFS_TYPE_EA        8
+enum class btrfs_inode_type : uint8_t {
+    unknown = 0,
+    file = 1,
+    directory = 2,
+    chardev = 3,
+    blockdev = 4,
+    fifo = 5,
+    socket = 6,
+    symlink = 7,
+    ea = 8
+};
 
 typedef struct {
     KEY key;
     uint64_t transid;
     uint16_t m;
     uint16_t n;
-    uint8_t type;
+    enum btrfs_inode_type type;
     char name[1];
 } DIR_ITEM;
 
