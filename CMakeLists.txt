@@ -89,5 +89,5 @@ else()
     target_compile_options(ntfs2btrfs PRIVATE -Wall -Wextra -Wno-address-of-packed-member -Wconversion -Wno-unknown-pragmas -Werror=pointer-arith)
 endif()
 
-install(TARGETS ntfs2btrfs DESTINATION sbin)
+install(TARGETS ntfs2btrfs DESTINATION ${CMAKE_INSTALL_SBINDIR})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ntfs2btrfs.8 DESTINATION ${CMAKE_INSTALL_MANDIR}/man8)
