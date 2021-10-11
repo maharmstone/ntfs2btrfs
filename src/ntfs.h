@@ -262,9 +262,9 @@ typedef struct {
 
 enum class file_name_type : uint8_t {
     POSIX = 0,
-    WIN32 = 1,
+    WINDOWS = 1,
     DOS = 2,
-    WIN32_AND_DOS = 3
+    WINDOWS_AND_DOS = 3
 };
 
 typedef struct {
