@@ -74,7 +74,7 @@ static const uint16_t max_inline = 2048;
 static const uint64_t max_extent_size = 0x8000000; // 128 MB
 static const uint64_t max_comp_extent_size = 0x20000; // 128 KB
 
-static const char chunk_error_message[] = "Could not find enough space to create new chunk. Try clearing a few gigabytes of space, or defragging.";
+static constexpr char chunk_error_message[] = "Could not find enough space to create new chunk. Try clearing a few gigabytes of space, or defragging.";
 
 #define EA_NTACL "security.NTACL"
 #define EA_NTACL_HASH 0x45922146
@@ -1926,12 +1926,14 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     is_dir = f.is_directory();
 
-    auto add_warning = [&]<typename... Args>(const string_view& msg, Args&&... args) {
+    auto _add_warning = [&]<typename T, typename... Args>(const T& msg, Args&&... args) {
         if (filename.empty())
             filename = f.get_filename();
 
         warnings.emplace_back(filename + ": " + fmt::format(msg, std::forward<Args>(args)...));
     };
+
+#define add_warning(s, ...) _add_warning(FMT_COMPILE(s), ##__VA_ARGS__)
 
     f.loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view& res_data, const u16string_view& name) -> bool {
         switch (att.TypeCode) {
@@ -2530,6 +2532,8 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     for (const auto& w : warnings) {
         fmt::print(stderr, "{}\n", w);
     }
+
+#undef add_warning
 
     const auto& si = *(const STANDARD_INFORMATION*)standard_info.data();
 

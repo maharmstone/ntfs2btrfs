@@ -33,6 +33,7 @@
 #pragma warning(push)
 #pragma warning(disable : 26495 26451 26437 26812)
 #include <fmt/format.h>
+#include <fmt/compile.h>
 #pragma warning(pop)
 
 #ifdef _MSC_VER
@@ -99,10 +100,10 @@ public:
 typedef std::unique_ptr<HANDLE, handle_closer> unique_handle;
 #endif
 
-class formatted_error : public std::exception {
+class _formatted_error : public std::exception {
 public:
     template<typename T, typename... Args>
-    formatted_error(const T& s, Args&&... args) {
+    _formatted_error(const T& s, Args&&... args) {
         msg = fmt::format(s, std::forward<Args>(args)...);
     }
 
@@ -113,6 +114,8 @@ public:
 private:
     std::string msg;
 };
+
+#define formatted_error(s, ...) _formatted_error(FMT_COMPILE(s), ##__VA_ARGS__)
 
 struct space {
     space(uint64_t offset, uint64_t length) : offset(offset), length(length) { }
