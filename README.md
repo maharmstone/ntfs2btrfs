@@ -33,8 +33,11 @@ On Linux, as root:
 Installation
 ------------
 
-On Windows, go to the [Releases page](https://github.com/maharmstone/ntfs2btrfs/releases) and
-download the latest Zip file.
+For Windows:
+* [Scoop](https://github.com/ScoopInstaller/Main/blob/master/bucket/ntfs2btrfs.json)
+
+Or go to the [Releases page](https://github.com/maharmstone/ntfs2btrfs/releases) and
+download the latest zip file.
 
 For Linux:
 * [Arch](https://aur.archlinux.org/packages/ntfs2btrfs-git) (thanks to [nicman23](https://github.com/nicman23))
