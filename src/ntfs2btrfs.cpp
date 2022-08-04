@@ -1029,7 +1029,7 @@ static void update_extent_root(root& extent_root, enum btrfs_csum_type csum_type
     }
 }
 
-static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t index, const string_view& name) {
+static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t index, string_view name) {
     if (r.items.count(KEY{inode, TYPE_INODE_REF, parent}) != 0) { // collision, append to the end
         auto& old = r.items.at(KEY{inode, TYPE_INODE_REF, parent});
 
@@ -1499,7 +1499,7 @@ static BTRFS_TIME win_time_to_unix(int64_t time) {
     return bt;
 }
 
-static void link_inode(root& r, uint64_t inode, uint64_t dir, const string_view& name,
+static void link_inode(root& r, uint64_t inode, uint64_t dir, string_view name,
                        enum btrfs_inode_type type) {
     uint64_t seq;
 
@@ -1799,7 +1799,7 @@ static void process_mappings(const ntfs& dev, uint64_t inode, list<mapping>& map
     }
 }
 
-static void set_xattr(root& r, uint64_t inode, const string_view& name, uint32_t hash, const buffer_t& data) {
+static void set_xattr(root& r, uint64_t inode, string_view name, uint32_t hash, const buffer_t& data) {
     buffer_t buf(offsetof(DIR_ITEM, name[0]) + name.size() + data.size());
     auto& di = *(DIR_ITEM*)buf.data();
 
@@ -1839,7 +1839,7 @@ static void clear_line() {
 #endif
 }
 
-static bool string_eq_ci(const string_view& s1, const string_view& s2) {
+static bool string_eq_ci(string_view s1, string_view s2) {
     if (s1.length() != s2.length())
         return false;
 
@@ -1933,7 +1933,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
         warnings.emplace_back(filename + ": " + fmt::format(s, forward<Args>(args)...));
     };
 
-    f.loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view& res_data, const u16string_view& name) -> bool {
+    f.loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, string_view res_data, u16string_view name) -> bool {
         switch (att.TypeCode) {
             case ntfs_attribute::STANDARD_INFORMATION:
                 if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
@@ -3664,7 +3664,7 @@ static void check_cpu() noexcept {
 }
 #endif
 
-static enum btrfs_compression parse_compression_type(const string_view& s) {
+static enum btrfs_compression parse_compression_type(string_view s) {
     if (s == "none")
         return btrfs_compression::none;
     else if (s == "zlib")
@@ -3677,7 +3677,7 @@ static enum btrfs_compression parse_compression_type(const string_view& s) {
         throw formatted_error("Unrecognized compression type {}.", s);
 }
 
-static enum btrfs_csum_type parse_csum_type(const string_view& s) {
+static enum btrfs_csum_type parse_csum_type(string_view s) {
     if (s == "crc32c")
         return btrfs_csum_type::crc32c;
     else if (s == "xxhash")

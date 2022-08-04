@@ -35,7 +35,7 @@ class btrfs {
 public:
     btrfs(const string& fn);
     uint64_t find_root_addr(uint64_t root);
-    bool walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func);
+    bool walk_tree(uint64_t addr, const function<bool(const KEY&, string_view)>& func);
     const pair<const uint64_t, buffer_t>& find_chunk(uint64_t addr);
     buffer_t raw_read(uint64_t phys_addr, uint32_t len);
     void raw_write(uint64_t phys_addr, const buffer_t& buf);
@@ -259,7 +259,7 @@ buffer_t btrfs::read(uint64_t addr, uint32_t len) {
     return raw_read(addr - cp.first + cis[0].offset, len);
 }
 
-bool btrfs::walk_tree(uint64_t addr, const function<bool(const KEY&, const string_view&)>& func) {
+bool btrfs::walk_tree(uint64_t addr, const function<bool(const KEY&, string_view)>& func) {
     auto tree = read(addr, sb.node_size);
 
     // FIXME - check checksum
@@ -335,7 +335,7 @@ void btrfs::read_chunks() {
 
     chunks_t chunks2;
 
-    walk_tree(sb.chunk_tree_addr, [&](const KEY& key, const string_view& data) {
+    walk_tree(sb.chunk_tree_addr, [&](const KEY& key, string_view data) {
         if (key.obj_type != TYPE_CHUNK_ITEM)
             return true;
 
@@ -350,7 +350,7 @@ void btrfs::read_chunks() {
 uint64_t btrfs::find_root_addr(uint64_t root) {
     optional<uint64_t> ret;
 
-    walk_tree(sb.root_tree_addr, [&](const KEY& key, const string_view& data) {
+    walk_tree(sb.root_tree_addr, [&](const KEY& key, string_view data) {
         if (key.obj_id != root || key.obj_type != TYPE_ROOT_ITEM)
             return true;
 
@@ -377,7 +377,7 @@ void rollback(const string& fn) {
     uint64_t inode = 0;
     uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)image_filename, sizeof(image_filename) - 1);
 
-    b.walk_tree(img_root_addr, [&](const KEY& key, const string_view& data) {
+    b.walk_tree(img_root_addr, [&](const KEY& key, string_view data) {
         if (key.obj_id > SUBVOL_ROOT_INODE || (key.obj_id == SUBVOL_ROOT_INODE && key.obj_type > TYPE_DIR_ITEM))
             return false;
 
@@ -407,7 +407,7 @@ void rollback(const string& fn) {
 
     map<uint64_t, pair<uint64_t, uint64_t>> extents;
 
-    b.walk_tree(img_root_addr, [&](const KEY& key, const string_view& data) {
+    b.walk_tree(img_root_addr, [&](const KEY& key, string_view data) {
         if (key.obj_id > inode || (key.obj_id == inode && key.obj_type > TYPE_EXTENT_DATA))
             return false;
 

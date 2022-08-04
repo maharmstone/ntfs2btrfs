@@ -221,11 +221,11 @@ buffer_t ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length,
     return ret;
 }
 
-buffer_t ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute type, const u16string_view& name) {
+buffer_t ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute type, u16string_view name) {
     buffer_t ret;
     bool found = false;
 
-    loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view& res_data, const u16string_view& att_name) -> bool {
+    loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, string_view res_data, u16string_view att_name) -> bool {
         if (att.TypeCode != type || name != att_name)
             return true;
 
@@ -261,10 +261,10 @@ buffer_t ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute t
     return ret;
 }
 
-list<mapping> ntfs_file::read_mappings(enum ntfs_attribute type, const u16string_view& name) {
+list<mapping> ntfs_file::read_mappings(enum ntfs_attribute type, u16string_view name) {
     list<mapping> mappings;
 
-    loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view&, const u16string_view& att_name) -> bool {
+    loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, string_view, u16string_view att_name) -> bool {
         if (att.TypeCode != type || name != att_name)
             return true;
 
@@ -465,7 +465,7 @@ string_view ntfs::find_sd(uint32_t id, ntfs_file& secure) {
 }
 
 static void walk_btree(const index_root& ir, const list<mapping>& mappings, const index_node_header& inh, ntfs& dev,
-                       const function<void(const index_entry&, const string_view&)>& func, unsigned int level) {
+                       const function<void(const index_entry&, string_view)>& func, unsigned int level) {
     auto ent = reinterpret_cast<const index_entry*>((uint8_t*)&inh + inh.first_entry);
 
     do {
@@ -510,7 +510,7 @@ void populate_skip_list(ntfs& dev, uint64_t inode, list<uint64_t>& skiplist) {
 
     skiplist.emplace_back(inode);
 
-    walk_btree(ir, ia, ir.node_header, dev, [&](const index_entry& ent, const string_view& data) {
+    walk_btree(ir, ia, ir.node_header, dev, [&](const index_entry& ent, string_view data) {
         if (data.empty())
             return;
 
@@ -533,7 +533,7 @@ void populate_skip_list(ntfs& dev, uint64_t inode, list<uint64_t>& skiplist) {
     }, 0);
 }
 
-void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEADER&, const string_view&, const u16string_view&)>& func) {
+void ntfs_file::loop_through_atts(const function<bool(const ATTRIBUTE_RECORD_HEADER&, string_view, u16string_view)>& func) {
     auto att = reinterpret_cast<const ATTRIBUTE_RECORD_HEADER*>((uint8_t*)file_record + file_record->FirstAttributeOffset);
     size_t offset = file_record->FirstAttributeOffset;
     buffer_t attlist;
@@ -701,7 +701,7 @@ string ntfs_file::get_filename() {
     do {
         uint64_t dir_num = 0;
 
-        f->loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view& res_data, const u16string_view&) -> bool {
+        f->loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, string_view res_data, u16string_view) -> bool {
             if (att.TypeCode != ntfs_attribute::FILE_NAME || att.FormCode != NTFS_ATTRIBUTE_FORM::RESIDENT_FORM)
                 return true;
 

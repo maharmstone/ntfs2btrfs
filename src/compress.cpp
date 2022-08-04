@@ -32,7 +32,7 @@
 using namespace std;
 
 #ifdef WITH_ZLIB
-optional<buffer_t> zlib_compress(const string_view& data, uint32_t cluster_size) {
+optional<buffer_t> zlib_compress(string_view data, uint32_t cluster_size) {
     z_stream c_stream;
     int ret;
     buffer_t out(data.length());
@@ -84,7 +84,7 @@ static __inline size_t lzo_max_outlen(size_t inlen) {
     return inlen + (inlen / 16) + 64 + 3; // formula comes from LZO.FAQ
 }
 
-optional<buffer_t> lzo_compress(const string_view& data, uint32_t cluster_size) {
+optional<buffer_t> lzo_compress(string_view data, uint32_t cluster_size) {
     size_t num_pages;
 
     num_pages = data.length() / cluster_size;
@@ -139,7 +139,7 @@ optional<buffer_t> lzo_compress(const string_view& data, uint32_t cluster_size) 
 #endif
 
 #ifdef WITH_ZSTD
-optional<buffer_t> zstd_compress(const string_view& data, uint32_t cluster_size) {
+optional<buffer_t> zstd_compress(string_view data, uint32_t cluster_size) {
     buffer_t out(ZSTD_compressBound(data.length()));
 
     auto ret = ZSTD_compress(out.data(), out.size(), data.data(), data.length(), 1);

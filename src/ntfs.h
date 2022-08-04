@@ -497,14 +497,14 @@ struct mapping {
 class ntfs_file {
 public:
     ntfs_file(ntfs& dev, uint64_t inode);
-    buffer_t read(uint64_t offset = 0, uint32_t length = 0, enum ntfs_attribute type = ntfs_attribute::DATA, const std::u16string_view& name = u"");
-    std::list<mapping> read_mappings(enum ntfs_attribute type = ntfs_attribute::DATA, const std::u16string_view& name = u"");
+    buffer_t read(uint64_t offset = 0, uint32_t length = 0, enum ntfs_attribute type = ntfs_attribute::DATA, std::u16string_view name = u"");
+    std::list<mapping> read_mappings(enum ntfs_attribute type = ntfs_attribute::DATA, std::u16string_view name = u"");
 
     bool is_directory() const {
         return file_record->Flags & FILE_RECORD_IS_DIRECTORY;
     }
 
-    void loop_through_atts(const std::function<bool(const ATTRIBUTE_RECORD_HEADER&, const std::string_view&, const std::u16string_view&)>& func);
+    void loop_through_atts(const std::function<bool(const ATTRIBUTE_RECORD_HEADER&, std::string_view, std::u16string_view)>& func);
     std::string get_filename();
 
     FILE_RECORD_SEGMENT_HEADER* file_record;

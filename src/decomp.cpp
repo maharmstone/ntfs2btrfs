@@ -148,7 +148,7 @@ buffer_t lznt1_decompress(string_view compdata, uint32_t size) {
     return ret;
 }
 
-buffer_t do_lzx_decompress(const string_view& compdata, uint32_t size) {
+buffer_t do_lzx_decompress(string_view compdata, uint32_t size) {
     auto ctx = lzx_allocate_decompressor(LZX_CHUNK_SIZE);
 
     if (!ctx)
@@ -192,7 +192,7 @@ buffer_t do_lzx_decompress(const string_view& compdata, uint32_t size) {
     return ret;
 }
 
-buffer_t do_xpress_decompress(const string_view& compdata, uint32_t size, uint32_t chunk_size) {
+buffer_t do_xpress_decompress(string_view compdata, uint32_t size, uint32_t chunk_size) {
     auto ctx = xpress_allocate_decompressor();
 
     if (!ctx)
