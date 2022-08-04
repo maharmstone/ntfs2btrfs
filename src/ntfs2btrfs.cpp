@@ -1926,14 +1926,12 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
     is_dir = f.is_directory();
 
-    auto _add_warning = [&]<typename T, typename... Args>(const T& msg, Args&&... args) {
+    auto add_warning = [&]<typename... Args>(fmt::format_string<Args...> s, Args&&... args) {
         if (filename.empty())
             filename = f.get_filename();
 
-        warnings.emplace_back(filename + ": " + fmt::format(msg, std::forward<Args>(args)...));
+        warnings.emplace_back(filename + ": " + fmt::format(s, forward<Args>(args)...));
     };
-
-#define add_warning(s, ...) _add_warning(FMT_COMPILE(s), ##__VA_ARGS__)
 
     f.loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, const string_view& res_data, const u16string_view& name) -> bool {
         switch (att.TypeCode) {
