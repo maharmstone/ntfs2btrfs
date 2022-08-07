@@ -57,6 +57,7 @@ list<relocation> relocs;
 uint64_t device_size, orig_device_size;
 bool reloc_last_sector = false;
 uint64_t mapped_inodes = 0, rewritten_inodes = 0, inline_inodes = 0;
+static uint64_t last_chunk_end;
 
 static const uint64_t stripe_length = 0x10000;
 static const uint64_t chunk_virt_offset = 0x100000;
@@ -446,6 +447,8 @@ static void create_data_chunks(ntfs& dev, const buffer_t& bmpdata) {
         addr += data_chunk_size;
         bdsv = bdsv.substr(len);
     }
+
+    last_chunk_end = chunks.back().offset - chunk_virt_offset + chunks.back().length;
 }
 
 static void add_item(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset, const buffer_t& buf) {
@@ -3550,6 +3553,18 @@ static void protect_superblocks(ntfs& dev, runs_t& runs) {
 
     if (reloc_last_sector)
         protect_cluster(dev, runs, device_size / cluster_size);
+
+    if (last_chunk_end < device_size) {
+        uint64_t cluster_start = last_chunk_end / cluster_size;
+        uint64_t cluster_end = device_size / cluster_size;
+
+        if (reloc_last_sector)
+            cluster_end--;
+
+        for (auto i = cluster_start; i <= cluster_end; i++) {
+            protect_cluster(dev, runs, i);
+        }
+    }
 }
 
 static void clear_first_cluster(ntfs& dev) {
