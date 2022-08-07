@@ -36,7 +36,6 @@
 #include <random>
 #include <locale>
 #include <span>
-#include <codecvt>
 #include <optional>
 
 #ifdef _WIN32
@@ -2075,7 +2074,6 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
     INODE_ITEM ii;
     uint64_t file_size = 0;
     list<mapping> mappings, wof_mappings;
-    wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
     vector<tuple<uint64_t, string>> links;
     buffer_t standard_info, sd, reparse_point, inline_data;
     string symlink;
@@ -2165,7 +2163,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 } else { // ADS
                     static const char xattr_prefix[] = "user.";
 
-                    auto ads_name = convert.to_bytes(name.data(), name.data() + name.length());
+                    auto ads_name = utf16_to_utf8(name);
                     auto max_xattr_size = (uint32_t)(tree_size - sizeof(tree_header) - sizeof(leaf_node) - offsetof(DIR_ITEM, name[0]) - ads_name.length() - (sizeof(xattr_prefix) - 1));
 
                     // FIXME - check xattr_name not reserved
@@ -2261,7 +2259,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                     if (att.Form.Resident.ValueLength < offsetof(FILE_NAME, FileName[0]) + (fn->FileNameLength * sizeof(char16_t)))
                         throw formatted_error("FILE_NAME was truncated");
 
-                    auto name2 = convert.to_bytes(fn->FileName, fn->FileName + fn->FileNameLength);
+                    auto name2 = utf16_to_utf8(u16string_view((char16_t*)fn->FileName, fn->FileNameLength));
 
                     if (name2.length() > 255) {
                         // FIXME - make sure no collision with existing file
@@ -2331,8 +2329,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                             rpb.SymbolicLinkReparseBuffer.PrintNameLength)) {
                             add_warning("Symlink reparse point buffer was truncated.");
                         } else if (rpb.SymbolicLinkReparseBuffer.Flags & SYMLINK_FLAG_RELATIVE) {
-                            symlink = convert.to_bytes(&rpb.SymbolicLinkReparseBuffer.PathBuffer[rpb.SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(char16_t)],
-                                                       &rpb.SymbolicLinkReparseBuffer.PathBuffer[(rpb.SymbolicLinkReparseBuffer.PrintNameOffset + rpb.SymbolicLinkReparseBuffer.PrintNameLength) / sizeof(char16_t)]);
+                            u16string_view sv(&rpb.SymbolicLinkReparseBuffer.PathBuffer[rpb.SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(char16_t)],
+                                              rpb.SymbolicLinkReparseBuffer.PrintNameLength / sizeof(char16_t));
+                            symlink = utf16_to_utf8(sv);
 
                             for (auto& c : symlink) {
                                 if (c == '\\')
