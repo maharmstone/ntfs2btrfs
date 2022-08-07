@@ -35,6 +35,7 @@
 #include <chrono>
 #include <random>
 #include <locale>
+#include <span>
 #include <codecvt>
 #include <optional>
 
@@ -89,6 +90,181 @@ static constexpr char chunk_error_message[] = "Could not find enough space to cr
 #define EA_CAP_HASH 0x7c3650b1
 
 using runs_t = map<uint64_t, list<data_alloc>>;
+
+static constexpr size_t utf16_to_utf8_len(u16string_view sv) noexcept {
+    size_t ret = 0;
+
+    while (!sv.empty()) {
+        if (sv[0] < 0x80)
+            ret++;
+        else if (sv[0] < 0x800)
+            ret += 2;
+        else if (sv[0] < 0xd800)
+            ret += 3;
+        else if (sv[0] < 0xdc00) {
+            if (sv.length() < 2 || (sv[1] & 0xdc00) != 0xdc00) {
+                ret += 3;
+                sv = sv.substr(1);
+                continue;
+            }
+
+            ret += 4;
+            sv = sv.substr(1);
+        } else
+            ret += 3;
+
+        sv = sv.substr(1);
+    }
+
+    return ret;
+}
+
+static constexpr void utf16_to_utf8_span(u16string_view sv, span<char> t) noexcept {
+    auto ptr = t.begin();
+
+    if (ptr == t.end())
+        return;
+
+    while (!sv.empty()) {
+        if (sv[0] < 0x80) {
+            *ptr = (uint8_t)sv[0];
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+        } else if (sv[0] < 0x800) {
+            *ptr = (uint8_t)(0xc0 | (sv[0] >> 6));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)(0x80 | (sv[0] & 0x3f));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+        } else if (sv[0] < 0xd800) {
+            *ptr = (uint8_t)(0xe0 | (sv[0] >> 12));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)(0x80 | ((sv[0] >> 6) & 0x3f));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)(0x80 | (sv[0] & 0x3f));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+        } else if (sv[0] < 0xdc00) {
+            if (sv.length() < 2 || (sv[1] & 0xdc00) != 0xdc00) {
+                *ptr = (uint8_t)0xef;
+                ptr++;
+
+                if (ptr == t.end())
+                    return;
+
+                *ptr = (uint8_t)0xbf;
+                ptr++;
+
+                if (ptr == t.end())
+                    return;
+
+                *ptr = (uint8_t)0xbd;
+                ptr++;
+
+                if (ptr == t.end())
+                    return;
+
+                sv = sv.substr(1);
+                continue;
+            }
+
+            char32_t cp = 0x10000 | ((sv[0] & ~0xd800) << 10) | (sv[1] & ~0xdc00);
+
+            *ptr = (uint8_t)(0xf0 | (cp >> 18));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)(0x80 | ((cp >> 12) & 0x3f));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)(0x80 | ((cp >> 6) & 0x3f));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)(0x80 | (cp & 0x3f));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            sv = sv.substr(1);
+        } else if (sv[0] < 0xe000) {
+            *ptr = (uint8_t)0xef;
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)0xbf;
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)0xbd;
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+        } else {
+            *ptr = (uint8_t)(0xe0 | (sv[0] >> 12));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)(0x80 | ((sv[0] >> 6) & 0x3f));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+
+            *ptr = (uint8_t)(0x80 | (sv[0] & 0x3f));
+            ptr++;
+
+            if (ptr == t.end())
+                return;
+        }
+
+        sv = sv.substr(1);
+    }
+}
+
+static constexpr string utf16_to_utf8(u16string_view sv) {
+    if (sv.empty())
+        return "";
+
+    string ret(utf16_to_utf8_len(sv), 0);
+
+    utf16_to_utf8_span(sv, ret);
+
+    return ret;
+}
 
 static void space_list_remove(list<space>& space_list, uint64_t offset, uint64_t length) {
     auto it = space_list.begin();
@@ -756,9 +932,7 @@ static void set_volume_label(superblock& sb, ntfs& dev) {
         if (vnw.empty())
             return;
 
-        wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
-
-        auto vn = convert.to_bytes((char16_t*)vnw.data(), (char16_t*)&vnw[vnw.size()]);
+        auto vn = utf16_to_utf8(u16string_view((char16_t*)vnw.data(), vnw.size()));
 
         if (vn.length() > MAX_LABEL_SIZE) {
             vn = vn.substr(0, MAX_LABEL_SIZE);
