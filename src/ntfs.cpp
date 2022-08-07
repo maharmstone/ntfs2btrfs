@@ -736,9 +736,7 @@ string ntfs_file::get_filename() {
         parts.pop_back();
     }
 
-    wstring_convert<codecvt_utf8_utf16<char16_t>, char16_t> convert;
-
-    return convert.to_bytes((char16_t*)retw.data(), (char16_t*)&retw[retw.length()]);
+    return utf16_to_utf8(retw);
 }
 
 void ntfs::seek(uint64_t pos) {

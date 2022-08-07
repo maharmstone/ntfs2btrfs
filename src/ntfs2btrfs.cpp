@@ -254,7 +254,7 @@ static constexpr void utf16_to_utf8_span(u16string_view sv, span<char> t) noexce
     }
 }
 
-static constexpr string utf16_to_utf8(u16string_view sv) {
+string utf16_to_utf8(u16string_view sv) {
     if (sv.empty())
         return "";
 

@@ -343,3 +343,6 @@ extern "C" void blake2b(void *out, size_t outlen, const void* in, size_t inlen);
 
 // rollback.cpp
 void rollback(const std::string& fn);
+
+// ntfs2btrfs.cpp
+std::string utf16_to_utf8(std::u16string_view sv);
