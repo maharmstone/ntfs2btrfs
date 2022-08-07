@@ -46,17 +46,17 @@
 
 using namespace std;
 
-list<chunk> chunks;
-list<root> roots;
-uint32_t tree_size = 0x4000; // FIXME
-list<space> space_list;
-bool chunks_changed;
-uint64_t data_size = 0;
-BTRFS_UUID fs_uuid, chunk_uuid, dev_uuid, subvol_uuid;
-list<relocation> relocs;
-uint64_t device_size, orig_device_size;
-bool reloc_last_sector = false;
-uint64_t mapped_inodes = 0, rewritten_inodes = 0, inline_inodes = 0;
+static list<chunk> chunks;
+static list<root> roots;
+static uint32_t tree_size = 0x4000; // FIXME
+static list<space> space_list;
+static bool chunks_changed;
+static uint64_t data_size = 0;
+static BTRFS_UUID fs_uuid, chunk_uuid, dev_uuid, subvol_uuid;
+static list<relocation> relocs;
+static uint64_t device_size, orig_device_size;
+static bool reloc_last_sector = false;
+static uint64_t mapped_inodes = 0, rewritten_inodes = 0, inline_inodes = 0;
 static uint64_t last_chunk_end;
 
 static const uint64_t stripe_length = 0x10000;
