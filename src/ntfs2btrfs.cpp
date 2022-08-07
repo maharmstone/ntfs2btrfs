@@ -3973,37 +3973,42 @@ Convert an NTFS filesystem to Btrfs.
             return 0;
         }
 
+        if (nocsum && compression != btrfs_compression::none) {
+            compression = btrfs_compression::none;
+            fmt::print("Disabling compression as it requires checksums to be enabled.\n");
+        } else {
 #ifndef WITH_ZLIB
-        if (compression == btrfs_compression::zlib)
-            throw runtime_error("Zlib compression not compiled in.");
+            if (compression == btrfs_compression::zlib)
+                throw runtime_error("Zlib compression not compiled in.");
 #endif
 
 #ifndef WITH_LZO
-        if (compression == btrfs_compression::lzo)
-            throw runtime_error("LZO compression not compiled in.");
+            if (compression == btrfs_compression::lzo)
+                throw runtime_error("LZO compression not compiled in.");
 #endif
 
 #ifndef WITH_ZSTD
-        if (compression == btrfs_compression::zstd)
-            throw runtime_error("Zstd compression not compiled in.");
+            if (compression == btrfs_compression::zstd)
+                throw runtime_error("Zstd compression not compiled in.");
 #endif
 
-        switch (compression) {
-            case btrfs_compression::zlib:
-                fmt::print("Using Zlib compression.\n");
-                break;
+            switch (compression) {
+                case btrfs_compression::zlib:
+                    fmt::print("Using Zlib compression.\n");
+                    break;
 
-            case btrfs_compression::lzo:
-                fmt::print("Using LZO compression.\n");
-                break;
+                case btrfs_compression::lzo:
+                    fmt::print("Using LZO compression.\n");
+                    break;
 
-            case btrfs_compression::zstd:
-                fmt::print("Using Zstd compression.\n");
-                break;
+                case btrfs_compression::zstd:
+                    fmt::print("Using Zstd compression.\n");
+                    break;
 
-            case btrfs_compression::none:
-                fmt::print("Not using compression.\n");
-                break;
+                case btrfs_compression::none:
+                    fmt::print("Not using compression.\n");
+                    break;
+            }
         }
 
         switch (csum_type) {
