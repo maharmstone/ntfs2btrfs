@@ -48,6 +48,13 @@ below.
 Changelog
 ---------
 
+* 20220812
+  * Added --no-datasum option, to skip calculating checksums
+  * LXSS / WSL metadata is now preserved
+  * Fixed lowercase drive letters not being recognized
+  * Fixed crash due to iterator invalidation (thanks to nyanpasu64)
+  * Fixed corruption when NTFS places file in last megabyte of disk
+
 * 20210923
   * Added (Btrfs) compression support (zlib, lzo, and zstd)
   * Added support for other hash algorithms: xxhash, sha256, and blake2
@@ -107,13 +114,13 @@ What works
 * Alternate data streams
 * DOS attributes (hidden, system, etc.)
 * Rollback to original NTFS image
+* Preservation of LXSS metadata
 
 What doesn't work
 -----------------
 
 * Windows' old extended attributes (you're not using these)
 * Large (i.e >16KB) ADSes (you're not using these either)
-* Preservation of LXSS metadata
 * Preservation of the case-sensitivity flag
 * Unusual cluster sizes (i.e. not 4 KB)
 * Encrypted files
