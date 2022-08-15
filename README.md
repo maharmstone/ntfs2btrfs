@@ -41,6 +41,7 @@ For Linux:
 * [Fedora](https://src.fedoraproject.org/rpms/ntfs2btrfs) (thanks to [Conan-Kudo](https://github.com/Conan-Kudo))
 * [Gentoo ebuild](https://raw.githubusercontent.com/maharmstone/ntfs2btrfs/master/ntfs2btrfs-20210923.ebuild)
 * [Debian & Ubuntu](https://sid.ethz.ch/debian/ntfs2btrfs/) (thanks to [alexmyczko](https://github.com/alexmyczko))
+* [openSUSE](https://build.opensuse.org/package/show/filesystems/ntfs2btrfs) (thanks to David Sterba)
 
 For other distributions or operating systems, you will need to compile it yourself - see
 below.
