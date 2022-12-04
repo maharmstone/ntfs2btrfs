@@ -37,7 +37,7 @@ On Windows, go to the [Releases page](https://github.com/maharmstone/ntfs2btrfs/
 download the latest Zip file, or use [Scoop](https://github.com/ScoopInstaller/Main/blob/master/bucket/ntfs2btrfs.json).
 
 For Linux:
-* [Arch](https://aur.archlinux.org/packages/ntfs2btrfs-git) (thanks to [nicman23](https://github.com/nicman23))
+* [Arch](https://aur.archlinux.org/packages/ntfs2btrfs)
 * [Fedora](https://src.fedoraproject.org/rpms/ntfs2btrfs) (thanks to [Conan-Kudo](https://github.com/Conan-Kudo))
 * [Gentoo ebuild](https://raw.githubusercontent.com/maharmstone/ntfs2btrfs/master/ntfs2btrfs-20220812.ebuild)
 * [Debian](https://packages.debian.org/ntfs2btrfs) (thanks to [alexmyczko](https://github.com/alexmyczko))
