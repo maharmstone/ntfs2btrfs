@@ -2301,11 +2301,24 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             }
 
             case ntfs_attribute::REPARSE_POINT: {
-                if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                    throw formatted_error("Error - REPARSE_POINT is non-resident"); // FIXME - can this happen?
+                if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM) {
+                    reparse_point.resize(res_data.size());
+                    memcpy(reparse_point.data(), res_data.data(), res_data.size());
+                } else {
+                    list<mapping> rp_mappings;
 
-                reparse_point.resize(res_data.size());
-                memcpy(reparse_point.data(), res_data.data(), res_data.size());
+                    read_nonresident_mappings(att, rp_mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
+
+                    reparse_point.resize((size_t)sector_align(att.Form.Nonresident.FileSize, cluster_size));
+                    memset(reparse_point.data(), 0, reparse_point.size());
+
+                    for (const auto& m : rp_mappings) {
+                        dev.seek(m.lcn * cluster_size);
+                        dev.read(reparse_point.data() + (m.vcn * cluster_size), (size_t)(m.length * cluster_size));
+                    }
+
+                    reparse_point.resize((size_t)att.Form.Nonresident.FileSize);
+                }
 
                 symlink.clear();
 
