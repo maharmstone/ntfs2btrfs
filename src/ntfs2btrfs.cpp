@@ -2300,9 +2300,9 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 break;
             }
 
-            case ntfs_attribute::SYMBOLIC_LINK: {
+            case ntfs_attribute::REPARSE_POINT: {
                 if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-                    throw formatted_error("Error - SYMBOLIC_LINK is non-resident"); // FIXME - can this happen?
+                    throw formatted_error("Error - REPARSE_POINT is non-resident"); // FIXME - can this happen?
 
                 reparse_point.resize(res_data.size());
                 memcpy(reparse_point.data(), res_data.data(), res_data.size());

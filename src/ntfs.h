@@ -81,7 +81,7 @@ enum class ntfs_attribute : uint32_t {
     INDEX_ROOT = 0x90,
     INDEX_ALLOCATION = 0xA0,
     BITMAP = 0xB0,
-    SYMBOLIC_LINK = 0xC0,
+    REPARSE_POINT = 0xC0,
     EA_INFORMATION = 0xD0,
     EA = 0xE0,
     PROPERTY_SET = 0xF0,
@@ -135,8 +135,8 @@ struct fmt::formatter<enum ntfs_attribute> {
             case ntfs_attribute::BITMAP:
                 return fmt::format_to(ctx.out(), "BITMAP");
 
-            case ntfs_attribute::SYMBOLIC_LINK:
-                return fmt::format_to(ctx.out(), "SYMBOLIC_LINK");
+            case ntfs_attribute::REPARSE_POINT:
+                return fmt::format_to(ctx.out(), "REPARSE_POINT");
 
             case ntfs_attribute::EA_INFORMATION:
                 return fmt::format_to(ctx.out(), "EA_INFORMATION");
