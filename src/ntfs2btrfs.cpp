@@ -2620,12 +2620,37 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             memcpy(v2.data(), v.data() + lxea.length(), v2.size());
 
             xattrs.emplace(EA_CAP, make_pair(EA_CAP_HASH, v2));
-        } else if (n != "$KERNEL.PURGE.APPXFICACHE" && n != "$KERNEL.PURGE.ESBCACHE" && n != "$CI.CATALOGHINT" &&
-                   n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASE" && n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASEEX1" &&
-                   n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.EPOCHEA" && n != "APPLICENSING" &&
-                   n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.COMMON" && n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.COMMONEX" &&
-                   n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.COMMONEX_1" && n != "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.USER") {
-            add_warning("Unrecognized EA {}", ea.first);
+        } else {
+            static const string_view recognized_eas[] = {
+                "$KERNEL.PURGE.APPXFICACHE",
+                "$KERNEL.PURGE.ESBCACHE",
+                "$CI.CATALOGHINT",
+                "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASE",
+                "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.DATABASEEX1",
+                "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.EPOCHEA",
+                "APPLICENSING",
+                "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.COMMON",
+                "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.COMMONEX",
+                "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.COMMONEX_1"
+                "C8A05BC0-3FA8-49E9-8148-61EE14A67687.CSC.USER",
+                "$KERNEL.PURGE.SMARTLOCKER.VALID",
+                "$KERNEL.SMARTLOCKER.ORIGINCLAIM",
+                "$KERNEL.PURGE.APPID.HASHINFO",
+                "$KERNEL.SMARTLOCKER.HASH",
+                "$KERNEL.PURGE.CIPCACHE",
+                "$KERNEL.SMARTLOCKER.UNINSTALLSTRINGS"
+            };
+
+            bool found = false;
+            for (const auto& r : recognized_eas) {
+                if (r == n) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+                add_warning("Unrecognized EA {}", n);
         }
     }
 
