@@ -39,7 +39,7 @@ download the latest Zip file, or use [Scoop](https://github.com/ScoopInstaller/M
 For Linux:
 * [Arch](https://aur.archlinux.org/packages/ntfs2btrfs)
 * [Fedora](https://src.fedoraproject.org/rpms/ntfs2btrfs) (thanks to [Conan-Kudo](https://github.com/Conan-Kudo))
-* [Gentoo ebuild](https://raw.githubusercontent.com/maharmstone/ntfs2btrfs/master/ntfs2btrfs-20220812.ebuild)
+* Gentoo - available as sys-fs/ntfs2btrfs in the guru repository
 * [Debian](https://packages.debian.org/ntfs2btrfs) (thanks to [alexmyczko](https://github.com/alexmyczko))
 * [Ubuntu](https://packages.ubuntu.com/ntfs2btrfs) (thanks to [alexmyczko](https://github.com/alexmyczko))
 * [openSUSE](https://build.opensuse.org/package/show/filesystems/ntfs2btrfs) (thanks to David Sterba)
