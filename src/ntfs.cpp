@@ -32,7 +32,7 @@
 
 using namespace std;
 
-void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size) {
+static void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size) {
     uint64_t sectors;
     uint16_t* seq;
     uint8_t* ptr;

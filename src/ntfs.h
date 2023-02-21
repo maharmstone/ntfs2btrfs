@@ -551,4 +551,3 @@ public:
 void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER& att, std::list<mapping>& mappings,
                                uint32_t cluster_size, uint64_t vdl);
 void populate_skip_list(ntfs& dev, uint64_t inode, std::list<uint64_t>& skiplist);
-void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size);
