@@ -2834,7 +2834,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                                       rph->ReparseDataLength, sizeof(wof_external_info) + sizeof(file_provider_external_info_v0));
             }
 
-            auto fpei = *(file_provider_external_info_v0*)&wofei[1];
+            const auto& fpei = *(file_provider_external_info_v0*)&wofei[1];
 
             if (fpei.Version != FILE_PROVIDER_CURRENT_VERSION) {
                 throw formatted_error("rph->FILE_PROVIDER_EXTERNAL_INFO_V0 Version was {}, expected {}.",
