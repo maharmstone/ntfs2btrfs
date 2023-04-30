@@ -3245,6 +3245,16 @@ static void create_inodes(root& r, const buffer_t& mftbmp, ntfs& dev, runs_t& ru
     fmt::print("\n");
 }
 
+static uint64_t get_extent_data_ref_hash2(uint64_t root, uint64_t objid, uint64_t offset) {
+    uint32_t high_crc = 0xffffffff, low_crc = 0xffffffff;
+
+    high_crc = calc_crc32c(high_crc, (uint8_t*)&root, sizeof(uint64_t));
+    low_crc = calc_crc32c(low_crc, (uint8_t*)&objid, sizeof(uint64_t));
+    low_crc = calc_crc32c(low_crc, (uint8_t*)&offset, sizeof(uint64_t));
+
+    return ((uint64_t)high_crc << 31) ^ (uint64_t)low_crc;
+}
+
 static void create_data_extent_items(root& extent_root, const runs_t& runs, uint32_t cluster_size, uint64_t image_subvol_id,
                                      uint64_t image_inode) {
     for (const auto& rs : runs) {
@@ -3294,20 +3304,34 @@ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint
                          &di, sizeof(data_item));
             } else {
                 data_item2 di2;
+                EXTENT_DATA_REF* e1;
+                EXTENT_DATA_REF* e2;
 
                 di2.extent_item.refcount = 2;
                 di2.extent_item.generation = 1;
                 di2.extent_item.flags = EXTENT_ITEM_DATA;
                 di2.type1 = TYPE_EXTENT_DATA_REF;
-                di2.edr1.root = image_subvol_id;
-                di2.edr1.objid = image_inode;
-                di2.edr1.count = 1;
-                di2.edr1.offset = img_addr;
                 di2.type2 = TYPE_EXTENT_DATA_REF;
-                di2.edr2.root = BTRFS_ROOT_FSTREE;
-                di2.edr2.objid = r.inode;
-                di2.edr2.count = 1;
-                di2.edr2.offset = r.file_offset * cluster_size;
+
+                auto hash1 = get_extent_data_ref_hash2(image_subvol_id, image_inode, img_addr);
+                auto hash2 = get_extent_data_ref_hash2(BTRFS_ROOT_FSTREE, r.inode, r.file_offset * cluster_size);
+
+                if (hash2 > hash1) {
+                    e1 = &di2.edr2;
+                    e2 = &di2.edr1;
+                } else {
+                    e1 = &di2.edr1;
+                    e2 = &di2.edr2;
+                }
+
+                e1->root = image_subvol_id;
+                e1->objid = image_inode;
+                e1->count = 1;
+                e1->offset = img_addr;
+                e2->root = BTRFS_ROOT_FSTREE;
+                e2->objid = r.inode;
+                e2->count = 1;
+                e2->offset = r.file_offset * cluster_size;
 
                 add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
                          &di2, sizeof(data_item2));
