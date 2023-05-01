@@ -50,6 +50,11 @@ below.
 Changelog
 ---------
 
+* 20230501
+  * Fixed inline extent items being written out of order (not diagnosed by `btrfs check`)
+  * Fixed metadata items being written with wrong level value (not diagnosed by `btrfs check`)
+  * ADSes with overly-long names now get skipped
+
 * 20220812
   * Added --no-datasum option, to skip calculating checksums
   * LXSS / WSL metadata is now preserved
@@ -95,7 +100,9 @@ on CMakeLists.txt, and click Compile.
 
 On Linux:
 
-    cmake .
+    mkdir build
+    cd build
+    cmake ..
     make
 
 You'll also need [libfmt](https://github.com/fmtlib/fmt) installed - it should be
