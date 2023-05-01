@@ -284,21 +284,21 @@ typedef struct {
 
 typedef struct {
     EXTENT_ITEM extent_item;
-    uint8_t type;
+    btrfs_key_type type;
     TREE_BLOCK_REF tbr;
 } metadata_item;
 
 typedef struct {
     EXTENT_ITEM extent_item;
-    uint8_t type;
+    btrfs_key_type type;
     EXTENT_DATA_REF edr;
 } data_item;
 
 typedef struct {
     EXTENT_ITEM extent_item;
-    uint8_t type1;
+    btrfs_key_type type1;
     EXTENT_DATA_REF edr1;
-    uint8_t type2;
+    btrfs_key_type type2;
     EXTENT_DATA_REF edr2;
 } data_item2;
 
@@ -315,6 +315,86 @@ struct relocation {
 static inline uint64_t sector_align(uint64_t v, uint64_t s) {
     return ((v + s - 1) / s) * s;
 }
+
+template<>
+struct fmt::formatter<enum btrfs_key_type> {
+    constexpr auto parse(format_parse_context& ctx) {
+        auto it = ctx.begin();
+
+        if (it != ctx.end() && *it != '}')
+            throw format_error("invalid format");
+
+        return it;
+    }
+
+    template<typename format_context>
+    auto format(enum btrfs_key_type k, format_context& ctx) const {
+        switch (k) {
+            case btrfs_key_type::INODE_ITEM:
+                return fmt::format_to(ctx.out(), "INODE_ITEM");
+            case btrfs_key_type::INODE_REF:
+                return fmt::format_to(ctx.out(), "INODE_REF");
+            case btrfs_key_type::INODE_EXTREF:
+                return fmt::format_to(ctx.out(), "INODE_EXTREF");
+            case btrfs_key_type::XATTR_ITEM:
+                return fmt::format_to(ctx.out(), "XATTR_ITEM");
+            case btrfs_key_type::ORPHAN_INODE:
+                return fmt::format_to(ctx.out(), "ORPHAN_INODE");
+            case btrfs_key_type::DIR_ITEM:
+                return fmt::format_to(ctx.out(), "DIR_ITEM");
+            case btrfs_key_type::DIR_INDEX:
+                return fmt::format_to(ctx.out(), "DIR_INDEX");
+            case btrfs_key_type::EXTENT_DATA:
+                return fmt::format_to(ctx.out(), "EXTENT_DATA");
+            case btrfs_key_type::EXTENT_CSUM:
+                return fmt::format_to(ctx.out(), "EXTENT_CSUM");
+            case btrfs_key_type::ROOT_ITEM:
+                return fmt::format_to(ctx.out(), "ROOT_ITEM");
+            case btrfs_key_type::ROOT_BACKREF:
+                return fmt::format_to(ctx.out(), "ROOT_BACKREF");
+            case btrfs_key_type::ROOT_REF:
+                return fmt::format_to(ctx.out(), "ROOT_REF");
+            case btrfs_key_type::EXTENT_ITEM:
+                return fmt::format_to(ctx.out(), "EXTENT_ITEM");
+            case btrfs_key_type::METADATA_ITEM:
+                return fmt::format_to(ctx.out(), "METADATA_ITEM");
+            case btrfs_key_type::TREE_BLOCK_REF:
+                return fmt::format_to(ctx.out(), "TREE_BLOCK_REF");
+            case btrfs_key_type::EXTENT_DATA_REF:
+                return fmt::format_to(ctx.out(), "EXTENT_DATA_REF");
+            case btrfs_key_type::EXTENT_REF_V0:
+                return fmt::format_to(ctx.out(), "EXTENT_REF_V0");
+            case btrfs_key_type::SHARED_BLOCK_REF:
+                return fmt::format_to(ctx.out(), "SHARED_BLOCK_REF");
+            case btrfs_key_type::SHARED_DATA_REF:
+                return fmt::format_to(ctx.out(), "SHARED_DATA_REF");
+            case btrfs_key_type::BLOCK_GROUP_ITEM:
+                return fmt::format_to(ctx.out(), "BLOCK_GROUP_ITEM");
+            case btrfs_key_type::FREE_SPACE_INFO:
+                return fmt::format_to(ctx.out(), "FREE_SPACE_INFO");
+            case btrfs_key_type::FREE_SPACE_EXTENT:
+                return fmt::format_to(ctx.out(), "FREE_SPACE_EXTENT");
+            case btrfs_key_type::FREE_SPACE_BITMAP:
+                return fmt::format_to(ctx.out(), "FREE_SPACE_BITMAP");
+            case btrfs_key_type::DEV_EXTENT:
+                return fmt::format_to(ctx.out(), "DEV_EXTENT");
+            case btrfs_key_type::DEV_ITEM:
+                return fmt::format_to(ctx.out(), "DEV_ITEM");
+            case btrfs_key_type::CHUNK_ITEM:
+                return fmt::format_to(ctx.out(), "CHUNK_ITEM");
+            case btrfs_key_type::TEMP_ITEM:
+                return fmt::format_to(ctx.out(), "TEMP_ITEM");
+            case btrfs_key_type::DEV_STATS:
+                return fmt::format_to(ctx.out(), "DEV_STATS");
+            case btrfs_key_type::SUBVOL_UUID:
+                return fmt::format_to(ctx.out(), "SUBVOL_UUID");
+            case btrfs_key_type::SUBVOL_REC_UUID:
+                return fmt::format_to(ctx.out(), "SUBVOL_REC_UUID");
+            default:
+                return fmt::format_to(ctx.out(), "{:x}", (uint8_t)k);
+        }
+    }
+};
 
 static const uint64_t image_subvol_id = 0x100;
 static const char image_filename[] = "ntfs.img";

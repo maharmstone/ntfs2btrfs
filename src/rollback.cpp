@@ -304,7 +304,7 @@ void btrfs::read_chunks() {
     do {
         auto& key = *(KEY*)ptr;
 
-        if (key.obj_type != TYPE_CHUNK_ITEM)
+        if (key.obj_type != btrfs_key_type::CHUNK_ITEM)
             break;
 
         auto& ci = *(CHUNK_ITEM*)(ptr + sizeof(key));
@@ -336,7 +336,7 @@ void btrfs::read_chunks() {
     chunks_t chunks2;
 
     walk_tree(sb.chunk_tree_addr, [&](const KEY& key, string_view data) {
-        if (key.obj_type != TYPE_CHUNK_ITEM)
+        if (key.obj_type != btrfs_key_type::CHUNK_ITEM)
             return true;
 
         chunks2.emplace(key.offset, buffer_t{data.data(), data.data() + data.size()});
@@ -351,7 +351,7 @@ uint64_t btrfs::find_root_addr(uint64_t root) {
     optional<uint64_t> ret;
 
     walk_tree(sb.root_tree_addr, [&](const KEY& key, string_view data) {
-        if (key.obj_id != root || key.obj_type != TYPE_ROOT_ITEM)
+        if (key.obj_id != root || key.obj_type != btrfs_key_type::ROOT_ITEM)
             return true;
 
         const auto& ri = *(ROOT_ITEM*)data.data();
@@ -378,17 +378,17 @@ void rollback(const string& fn) {
     uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)image_filename, sizeof(image_filename) - 1);
 
     b.walk_tree(img_root_addr, [&](const KEY& key, string_view data) {
-        if (key.obj_id > SUBVOL_ROOT_INODE || (key.obj_id == SUBVOL_ROOT_INODE && key.obj_type > TYPE_DIR_ITEM))
+        if (key.obj_id > SUBVOL_ROOT_INODE || (key.obj_id == SUBVOL_ROOT_INODE && key.obj_type > btrfs_key_type::DIR_ITEM))
             return false;
 
-        if (key.obj_id == SUBVOL_ROOT_INODE && key.obj_type == TYPE_DIR_ITEM && key.offset == hash) {
+        if (key.obj_id == SUBVOL_ROOT_INODE && key.obj_type == btrfs_key_type::DIR_ITEM && key.offset == hash) {
             auto& di = *(DIR_ITEM*)data.data();
 
             // FIXME - handle hash collisions
 
             if (di.n == sizeof(image_filename) - 1 && !memcmp(di.name, image_filename, di.n)) {
-                if (di.key.obj_type != TYPE_INODE_ITEM)
-                    throw formatted_error("DIR_ITEM for {} pointed to object type {:x}, expected TYPE_INODE_ITEM.",
+                if (di.key.obj_type != btrfs_key_type::INODE_ITEM)
+                    throw formatted_error("DIR_ITEM for {} pointed to object type {}, expected INODE_ITEM.",
                                           string_view(di.name, di.n), di.key.obj_type);
 
                 inode = di.key.obj_id;
@@ -408,10 +408,10 @@ void rollback(const string& fn) {
     map<uint64_t, pair<uint64_t, uint64_t>> extents;
 
     b.walk_tree(img_root_addr, [&](const KEY& key, string_view data) {
-        if (key.obj_id > inode || (key.obj_id == inode && key.obj_type > TYPE_EXTENT_DATA))
+        if (key.obj_id > inode || (key.obj_id == inode && key.obj_type > btrfs_key_type::EXTENT_DATA))
             return false;
 
-        if (key.obj_id != inode || key.obj_type != TYPE_EXTENT_DATA)
+        if (key.obj_id != inode || key.obj_type != btrfs_key_type::EXTENT_DATA)
             return true;
 
         const auto& ed = *(EXTENT_DATA*)data.data();

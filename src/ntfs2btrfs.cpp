@@ -451,29 +451,29 @@ static void create_data_chunks(ntfs& dev, const buffer_t& bmpdata) {
     last_chunk_end = chunks.back().offset - chunk_virt_offset + chunks.back().length;
 }
 
-static void add_item(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset, const buffer_t& buf) {
+static void add_item(root& r, uint64_t obj_id, btrfs_key_type obj_type, uint64_t offset, const buffer_t& buf) {
     auto ret = r.items.emplace(KEY{obj_id, obj_type, offset}, buf);
 
     if (!ret.second)
-        throw formatted_error("Could not insert entry ({:x}, {:x}, {:x}) into root items list.", obj_id, obj_type, offset);
+        throw formatted_error("Could not insert entry ({:x}, {}, {:x}) into root items list.", obj_id, obj_type, offset);
 }
 
-static void add_item_move(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset, buffer_t& buf) {
+static void add_item_move(root& r, uint64_t obj_id, btrfs_key_type obj_type, uint64_t offset, buffer_t& buf) {
     auto ret = r.items.emplace(KEY{obj_id, obj_type, offset}, buffer_t{});
 
     if (!ret.second)
-        throw formatted_error("Could not insert entry ({:x}, {:x}, {:x}) into root items list.", obj_id, obj_type, offset);
+        throw formatted_error("Could not insert entry ({:x}, {}, {:x}) into root items list.", obj_id, obj_type, offset);
 
     auto& it = ret.first->second;
 
     it.swap(buf);
 }
 
-static void add_item(root& r, uint64_t obj_id, uint8_t obj_type, uint64_t offset, const void* data, uint16_t len) {
+static void add_item(root& r, uint64_t obj_id, btrfs_key_type obj_type, uint64_t offset, const void* data, uint16_t len) {
     auto ret = r.items.emplace(KEY{obj_id, obj_type, offset}, buffer_t(len));
 
     if (!ret.second)
-        throw formatted_error("Could not insert entry ({:x}, {:x}, {:x}) into root items list.", obj_id, obj_type, offset);
+        throw formatted_error("Could not insert entry ({:x}, {}, {:x}) into root items list.", obj_id, obj_type, offset);
 
     auto& it = ret.first->second;
 
@@ -500,7 +500,7 @@ static void add_chunk(root& chunk_root, root& devtree_root, root& extent_root, c
     ci1s.stripe.offset = c.disk_start;
     ci1s.stripe.dev_uuid = dev_uuid;
 
-    add_item(chunk_root, 0x100, TYPE_CHUNK_ITEM, c.offset, &ci1s, sizeof(ci1s));
+    add_item(chunk_root, 0x100, btrfs_key_type::CHUNK_ITEM, c.offset, &ci1s, sizeof(ci1s));
 
     de.chunktree = BTRFS_ROOT_CHUNK;
     de.objid = 0x100;
@@ -508,13 +508,13 @@ static void add_chunk(root& chunk_root, root& devtree_root, root& extent_root, c
     de.length = c.length;
     de.chunktree_uuid = chunk_uuid;
 
-    add_item(devtree_root, 1, TYPE_DEV_EXTENT, c.disk_start, &de, sizeof(DEV_EXTENT));
+    add_item(devtree_root, 1, btrfs_key_type::DEV_EXTENT, c.disk_start, &de, sizeof(DEV_EXTENT));
 
     bgi.chunk_tree = 0x100;
     bgi.flags = c.type;
     // bgi.used gets set in update_extent_root
 
-    add_item(extent_root, c.offset, TYPE_BLOCK_GROUP_ITEM, c.length, &bgi, sizeof(BLOCK_GROUP_ITEM));
+    add_item(extent_root, c.offset, btrfs_key_type::BLOCK_GROUP_ITEM, c.length, &bgi, sizeof(BLOCK_GROUP_ITEM));
 }
 
 static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) {
@@ -526,7 +526,7 @@ static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) 
     mi.extent_item.refcount = 1;
     mi.extent_item.generation = 1;
     mi.extent_item.flags = EXTENT_ITEM_TREE_BLOCK;
-    mi.type = TYPE_TREE_BLOCK_REF;
+    mi.type = btrfs_key_type::TREE_BLOCK_REF;
     mi.tbr.offset = r;
 
     for (auto& c : chunks) {
@@ -544,7 +544,7 @@ static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) 
 
                     c.used += tree_size;
 
-                    add_item(extent_root, addr, TYPE_METADATA_ITEM, level, &mi, sizeof(metadata_item));
+                    add_item(extent_root, addr, btrfs_key_type::METADATA_ITEM, level, &mi, sizeof(metadata_item));
 
                     return addr;
                 }
@@ -594,7 +594,7 @@ static uint64_t allocate_metadata(uint64_t r, root& extent_root, uint8_t level) 
 
             c.used = tree_size;
 
-            add_item(extent_root, addr, TYPE_METADATA_ITEM, level, &mi, sizeof(metadata_item));
+            add_item(extent_root, addr, btrfs_key_type::METADATA_ITEM, level, &mi, sizeof(metadata_item));
 
             return addr;
         }
@@ -698,11 +698,11 @@ static void calc_tree_hash(tree_header& th, enum btrfs_csum_type csum_type) {
 }
 
 static void change_metadata_level(root& extent_root, uint64_t addr, uint8_t level, uint8_t old_level) {
-    if (auto f = extent_root.items.find(KEY{addr, TYPE_METADATA_ITEM, old_level}); f != extent_root.items.end()) {
+    if (auto f = extent_root.items.find(KEY{addr, btrfs_key_type::METADATA_ITEM, old_level}); f != extent_root.items.end()) {
         auto d = move(f->second);
 
         extent_root.items.erase(f);
-        extent_root.items.emplace(make_pair(KEY{addr, TYPE_METADATA_ITEM, level}, d));
+        extent_root.items.emplace(make_pair(KEY{addr, btrfs_key_type::METADATA_ITEM, level}, d));
     }
 
     for (auto& t : extent_root.trees) {
@@ -712,7 +712,7 @@ static void change_metadata_level(root& extent_root, uint64_t addr, uint8_t leve
             span ln((leaf_node*)((uint8_t*)t.data() + sizeof(tree_header)), th.num_items);
 
             for (auto& n : ln) {
-                if (n.key.obj_id == addr && n.key.obj_type == TYPE_METADATA_ITEM) {
+                if (n.key.obj_id == addr && n.key.obj_type == btrfs_key_type::METADATA_ITEM) {
                     n.key.offset = level;
                     break;
                 }
@@ -724,7 +724,7 @@ static void change_metadata_level(root& extent_root, uint64_t addr, uint8_t leve
             span in((internal_node*)((uint8_t*)t.data() + sizeof(tree_header)), th.num_items);
 
             for (auto& n : in) {
-                if (n.key.obj_id == addr && n.key.obj_type == TYPE_METADATA_ITEM) {
+                if (n.key.obj_id == addr && n.key.obj_type == btrfs_key_type::METADATA_ITEM) {
                     n.key.offset = level;
                     break;
                 }
@@ -995,7 +995,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
 
     sys_chunk_size = 0;
     for (const auto& c : chunk_root.items) {
-        if (c.first.obj_type == TYPE_CHUNK_ITEM) {
+        if (c.first.obj_type == btrfs_key_type::CHUNK_ITEM) {
             auto& ci = *(CHUNK_ITEM*)c.second.data();
 
             if (ci.type & BLOCK_FLAG_SYSTEM) {
@@ -1043,7 +1043,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
     set_volume_label(sb, dev);
 
     for (const auto& c : chunk_root.items) {
-        if (c.first.obj_type == TYPE_DEV_ITEM) {
+        if (c.first.obj_type == btrfs_key_type::DEV_ITEM) {
             memcpy(&sb.dev_item, c.second.data(), sizeof(DEV_ITEM));
             break;
         }
@@ -1055,7 +1055,7 @@ static void write_superblocks(ntfs& dev, root& chunk_root, root& root_root, enum
         uint8_t* ptr = sb.sys_chunk_array;
 
         for (const auto& c : chunk_root.items) {
-            if (c.first.obj_type == TYPE_CHUNK_ITEM) {
+            if (c.first.obj_type == btrfs_key_type::CHUNK_ITEM) {
                 auto& ci = *(CHUNK_ITEM*)c.second.data();
 
                 if (ci.type & BLOCK_FLAG_SYSTEM) {
@@ -1122,7 +1122,7 @@ static void add_dev_item(root& chunk_root) {
     di.device_uuid = dev_uuid;
     di.fs_uuid = fs_uuid;
 
-    add_item(chunk_root, 1, TYPE_DEV_ITEM, 1, &di, sizeof(DEV_ITEM));
+    add_item(chunk_root, 1, btrfs_key_type::DEV_ITEM, 1, &di, sizeof(DEV_ITEM));
 }
 
 static void add_to_root_root(const root& r, root& root_root) {
@@ -1146,7 +1146,7 @@ static void add_to_root_root(const root& r, root& root_root) {
 
     // block_number, bytes_used, and root_level are set in update_root_root
 
-    add_item(root_root, r.id, TYPE_ROOT_ITEM, 0, &ri, sizeof(ROOT_ITEM));
+    add_item(root_root, r.id, btrfs_key_type::ROOT_ITEM, 0, &ri, sizeof(ROOT_ITEM));
 }
 
 static void update_root_root(root& root_root, enum btrfs_csum_type csum_type) {
@@ -1160,7 +1160,7 @@ static void update_root_root(root& root_root, enum btrfs_csum_type csum_type) {
         bool changed = true;
 
         for (unsigned int i = 0; i < th.num_items; i++) {
-            if (ln[i].key.obj_type == TYPE_ROOT_ITEM) {
+            if (ln[i].key.obj_type == btrfs_key_type::ROOT_ITEM) {
                 auto& ri = *(ROOT_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
 
                 for (const auto& r : roots) {
@@ -1185,7 +1185,7 @@ static void add_dev_stats(root& r) {
 
     memset(ds, 0, sizeof(ds));
 
-    add_item(r, 0, TYPE_DEV_STATS, 1, &ds, sizeof(ds));
+    add_item(r, 0, btrfs_key_type::DEV_STATS, 1, &ds, sizeof(ds));
 }
 
 static BTRFS_UUID generate_uuid(default_random_engine& gen) {
@@ -1210,7 +1210,7 @@ static void update_extent_root(root& extent_root, enum btrfs_csum_type csum_type
         bool changed = true;
 
         for (unsigned int i = 0; i < th.num_items; i++) {
-            if (ln[i].key.obj_type == TYPE_BLOCK_GROUP_ITEM) {
+            if (ln[i].key.obj_type == btrfs_key_type::BLOCK_GROUP_ITEM) {
                 auto& bgi = *(BLOCK_GROUP_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
 
                 for (const auto& c : chunks) {
@@ -1229,8 +1229,8 @@ static void update_extent_root(root& extent_root, enum btrfs_csum_type csum_type
 }
 
 static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t index, string_view name) {
-    if (r.items.count(KEY{inode, TYPE_INODE_REF, parent}) != 0) { // collision, append to the end
-        auto& old = r.items.at(KEY{inode, TYPE_INODE_REF, parent});
+    if (r.items.count(KEY{inode, btrfs_key_type::INODE_REF, parent}) != 0) { // collision, append to the end
+        auto& old = r.items.at(KEY{inode, btrfs_key_type::INODE_REF, parent});
 
         size_t irlen = offsetof(INODE_REF, name[0]) + name.length();
 
@@ -1254,7 +1254,7 @@ static void add_inode_ref(root& r, uint64_t inode, uint64_t parent, uint64_t ind
     ir.n = (uint16_t)name.length();
     memcpy(ir.name, name.data(), name.length());
 
-    add_item_move(r, inode, TYPE_INODE_REF, parent, buf);
+    add_item_move(r, inode, btrfs_key_type::INODE_REF, parent, buf);
 }
 
 static void populate_fstree(root& r) {
@@ -1268,7 +1268,7 @@ static void populate_fstree(root& r) {
     ii.st_mode = __S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
     ii.sequence = 1;
 
-    add_item(r, SUBVOL_ROOT_INODE, TYPE_INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
+    add_item(r, SUBVOL_ROOT_INODE, btrfs_key_type::INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
 
     add_inode_ref(r, SUBVOL_ROOT_INODE, SUBVOL_ROOT_INODE, 0, "..");
 }
@@ -1283,7 +1283,7 @@ static void update_chunk_root(root& chunk_root, enum btrfs_csum_type csum_type) 
         auto ln = (leaf_node*)((uint8_t*)t.data() + sizeof(tree_header));
 
         for (unsigned int i = 0; i < th.num_items; i++) {
-            if (ln[i].key.obj_id == 1 && ln[i].key.obj_type == TYPE_DEV_ITEM && ln[i].key.offset == 1) {
+            if (ln[i].key.obj_id == 1 && ln[i].key.obj_type == btrfs_key_type::DEV_ITEM && ln[i].key.offset == 1) {
                 auto& di = *(DEV_ITEM*)((uint8_t*)t.data() + sizeof(tree_header) + ln[i].offset);
 
                 di.bytes_used = 0;
@@ -1319,8 +1319,8 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
         rr.n = sizeof(subvol_name) - 1;
         memcpy(rr.name, subvol_name, sizeof(subvol_name) - 1);
 
-        add_item(root_root, BTRFS_ROOT_FSTREE, TYPE_ROOT_REF, image_subvol_id, buf);
-        add_item_move(root_root, image_subvol_id, TYPE_ROOT_BACKREF, BTRFS_ROOT_FSTREE, buf);
+        add_item(root_root, BTRFS_ROOT_FSTREE, btrfs_key_type::ROOT_REF, image_subvol_id, buf);
+        add_item_move(root_root, image_subvol_id, btrfs_key_type::ROOT_BACKREF, BTRFS_ROOT_FSTREE, buf);
     }
 
     // add DIR_ITEM and DIR_INDEX
@@ -1330,7 +1330,7 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
         auto& di = *(DIR_ITEM*)buf.data();
 
         di.key.obj_id = image_subvol_id;
-        di.key.obj_type = TYPE_ROOT_ITEM;
+        di.key.obj_type = btrfs_key_type::ROOT_ITEM;
         di.key.offset = 0xffffffffffffffff;
         di.transid = 1;
         di.m = 0;
@@ -1340,8 +1340,8 @@ static root& add_image_subvol(root& root_root, root& fstree_root) {
 
         auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)subvol_name, sizeof(subvol_name) - 1);
 
-        add_item(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, buf);
-        add_item_move(fstree_root, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, buf);
+        add_item(fstree_root, SUBVOL_ROOT_INODE, btrfs_key_type::DIR_ITEM, hash, buf);
+        add_item_move(fstree_root, SUBVOL_ROOT_INODE, btrfs_key_type::DIR_INDEX, 2, buf);
     }
 
     // increase st_size in parent dir
@@ -1386,7 +1386,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode,
         }
     }
 
-    add_item(r, inode, TYPE_INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
+    add_item(r, inode, btrfs_key_type::INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
 
     // add DIR_ITEM and DIR_INDEX
 
@@ -1395,7 +1395,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode,
         auto& di = *(DIR_ITEM*)buf.data();
 
         di.key.obj_id = inode;
-        di.key.obj_type = TYPE_INODE_ITEM;
+        di.key.obj_type = btrfs_key_type::INODE_ITEM;
         di.key.offset = 0;
         di.transid = 1;
         di.m = 0;
@@ -1405,8 +1405,8 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode,
 
         auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)image_filename, sizeof(image_filename) - 1);
 
-        add_item(r, SUBVOL_ROOT_INODE, TYPE_DIR_ITEM, hash, buf);
-        add_item_move(r, SUBVOL_ROOT_INODE, TYPE_DIR_INDEX, 2, buf);
+        add_item(r, SUBVOL_ROOT_INODE, btrfs_key_type::DIR_ITEM, hash, buf);
+        add_item_move(r, SUBVOL_ROOT_INODE, btrfs_key_type::DIR_INDEX, 2, buf);
     }
 
     // add INODE_REF
@@ -1416,7 +1416,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode,
     // increase st_size in parent dir
 
     for (auto& it : r.items) {
-        if (it.first.obj_id == SUBVOL_ROOT_INODE && it.first.obj_type == TYPE_INODE_ITEM) {
+        if (it.first.obj_id == SUBVOL_ROOT_INODE && it.first.obj_type == btrfs_key_type::INODE_ITEM) {
             auto& ii2 = *(INODE_ITEM*)it.second.data();
 
             ii2.st_size += (sizeof(image_filename) - 1) * 2;
@@ -1459,7 +1459,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode,
 
             ed2.offset = 0;
 
-            add_item(r, inode, TYPE_EXTENT_DATA, addr, buf);
+            add_item(r, inode, btrfs_key_type::EXTENT_DATA, addr, buf);
 
             data_size += ed2.size;
         }
@@ -1715,7 +1715,7 @@ static void link_inode(root& r, uint64_t inode, uint64_t dir, string_view name,
         auto& di = *(DIR_ITEM*)buf.data();
 
         di.key.obj_id = inode;
-        di.key.obj_type = TYPE_INODE_ITEM;
+        di.key.obj_type = btrfs_key_type::INODE_ITEM;
         di.key.offset = 0;
         di.transid = 1;
         di.m = 0;
@@ -1725,10 +1725,10 @@ static void link_inode(root& r, uint64_t inode, uint64_t dir, string_view name,
 
         auto hash = calc_crc32c(0xfffffffe, (const uint8_t*)name.data(), (uint32_t)name.length());
 
-        if (r.items.count(KEY{dir, TYPE_DIR_ITEM, hash}) == 0)
-            add_item(r, dir, TYPE_DIR_ITEM, hash, buf);
+        if (r.items.count(KEY{dir, btrfs_key_type::DIR_ITEM, hash}) == 0)
+            add_item(r, dir, btrfs_key_type::DIR_ITEM, hash, buf);
         else { // hash collision
-            auto& ent = r.items.at(KEY{dir, TYPE_DIR_ITEM, hash});
+            auto& ent = r.items.at(KEY{dir, btrfs_key_type::DIR_ITEM, hash});
 
             if (!ent.empty()) {
                 ent.resize(ent.size() + buf.size());
@@ -1739,7 +1739,7 @@ static void link_inode(root& r, uint64_t inode, uint64_t dir, string_view name,
             }
         }
 
-        add_item_move(r, dir, TYPE_DIR_INDEX, seq, buf);
+        add_item_move(r, dir, btrfs_key_type::DIR_INDEX, seq, buf);
     }
 
     // add INODE_REF
@@ -2003,7 +2003,7 @@ static void set_xattr(root& r, uint64_t inode, string_view name, uint32_t hash, 
     auto& di = *(DIR_ITEM*)buf.data();
 
     di.key.obj_id = di.key.offset = 0;
-    di.key.obj_type = 0;
+    di.key.obj_type = (btrfs_key_type)0;
     di.transid = 1;
     di.m = (uint16_t)data.size();
     di.n = (uint16_t)name.size();
@@ -2011,7 +2011,7 @@ static void set_xattr(root& r, uint64_t inode, string_view name, uint32_t hash, 
     memcpy(di.name, name.data(), name.size());
     memcpy(di.name + name.size(), data.data(), data.size());
 
-    add_item_move(r, inode, TYPE_XATTR_ITEM, hash, buf);
+    add_item_move(r, inode, btrfs_key_type::XATTR_ITEM, hash, buf);
 }
 
 static void clear_line() {
@@ -3007,7 +3007,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 ed2.address = (m.lcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster) + chunk_virt_offset;
                 ed2.offset = 0;
 
-                add_item(r, inode, TYPE_EXTENT_DATA, m.vcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster, buf);
+                add_item(r, inode, btrfs_key_type::EXTENT_DATA, m.vcn * dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster, buf);
             }
         }
     } else if (!inline_data.empty()) {
@@ -3113,7 +3113,7 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
                 else
                     dev.write(compdata.data(), compdata.size());
 
-                add_item(r, inode, TYPE_EXTENT_DATA, pos, buf);
+                add_item(r, inode, btrfs_key_type::EXTENT_DATA, pos, buf);
 
                 lcn = (ed2.address - chunk_virt_offset) / cluster_size;
                 cl = ed2.size / cluster_size;
@@ -3162,13 +3162,13 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
             if (vdl < inline_data.size())
                 memset(ed.data + vdl, 0, (size_t)(inline_data.size() - vdl));
 
-            add_item_move(r, inode, TYPE_EXTENT_DATA, 0, buf);
+            add_item_move(r, inode, btrfs_key_type::EXTENT_DATA, 0, buf);
 
             ii.st_blocks = inline_data.size();
         }
     }
 
-    add_item(r, inode, TYPE_INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
+    add_item(r, inode, btrfs_key_type::INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
 
     if (item_type == btrfs_inode_type::unknown) {
         if (is_dir)
@@ -3305,13 +3305,13 @@ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint
                 di.extent_item.refcount = 1;
                 di.extent_item.generation = 1;
                 di.extent_item.flags = EXTENT_ITEM_DATA;
-                di.type = TYPE_EXTENT_DATA_REF;
+                di.type = btrfs_key_type::EXTENT_DATA_REF;
                 di.edr.root = image_subvol_id;
                 di.edr.objid = image_inode;
                 di.edr.count = 1;
                 di.edr.offset = img_addr;
 
-                add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
+                add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, btrfs_key_type::EXTENT_ITEM, r.length * cluster_size,
                          &di, sizeof(data_item));
             } else if (r.not_in_img) {
                 data_item di;
@@ -3319,13 +3319,13 @@ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint
                 di.extent_item.refcount = 1;
                 di.extent_item.generation = 1;
                 di.extent_item.flags = EXTENT_ITEM_DATA;
-                di.type = TYPE_EXTENT_DATA_REF;
+                di.type = btrfs_key_type::EXTENT_DATA_REF;
                 di.edr.root = BTRFS_ROOT_FSTREE;
                 di.edr.objid = r.inode;
                 di.edr.count = 1;
                 di.edr.offset = r.file_offset * cluster_size;
 
-                add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
+                add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, btrfs_key_type::EXTENT_ITEM, r.length * cluster_size,
                          &di, sizeof(data_item));
             } else {
                 data_item2 di2;
@@ -3335,8 +3335,8 @@ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint
                 di2.extent_item.refcount = 2;
                 di2.extent_item.generation = 1;
                 di2.extent_item.flags = EXTENT_ITEM_DATA;
-                di2.type1 = TYPE_EXTENT_DATA_REF;
-                di2.type2 = TYPE_EXTENT_DATA_REF;
+                di2.type1 = btrfs_key_type::EXTENT_DATA_REF;
+                di2.type2 = btrfs_key_type::EXTENT_DATA_REF;
 
                 auto hash1 = get_extent_data_ref_hash2(image_subvol_id, image_inode, img_addr);
                 auto hash2 = get_extent_data_ref_hash2(BTRFS_ROOT_FSTREE, r.inode, r.file_offset * cluster_size);
@@ -3358,7 +3358,7 @@ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint
                 e2->count = 1;
                 e2->offset = r.file_offset * cluster_size;
 
-                add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, TYPE_EXTENT_ITEM, r.length * cluster_size,
+                add_item(extent_root, (r.offset * cluster_size) + chunk_virt_offset, btrfs_key_type::EXTENT_ITEM, r.length * cluster_size,
                          &di2, sizeof(data_item2));
             }
         }
@@ -3563,7 +3563,7 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
             }
         }
 
-        add_item(csum_root, EXTENT_CSUM_ID, TYPE_EXTENT_CSUM, (r.offset * cluster_size) + chunk_virt_offset, &csums[0], (uint16_t)(r.length * cluster_size * csum_size / sector_size));
+        add_item(csum_root, EXTENT_CSUM_ID, btrfs_key_type::EXTENT_CSUM, (r.offset * cluster_size) + chunk_virt_offset, &csums[0], (uint16_t)(r.length * cluster_size * csum_size / sector_size));
     }
 
     fmt::print("\n");
@@ -3703,7 +3703,7 @@ static void populate_root_root(root& root_root) {
     ii.st_nlink = 1;
     ii.st_mode = __S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
 
-    add_item(root_root, BTRFS_ROOT_TREEDIR, TYPE_INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
+    add_item(root_root, BTRFS_ROOT_TREEDIR, btrfs_key_type::INODE_ITEM, 0, &ii, sizeof(INODE_ITEM));
 
     add_inode_ref(root_root, BTRFS_ROOT_TREEDIR, BTRFS_ROOT_TREEDIR, 0, "..");
 
@@ -3711,7 +3711,7 @@ static void populate_root_root(root& root_root) {
     auto& di = *(DIR_ITEM*)buf.data();
 
     di.key.obj_id = BTRFS_ROOT_FSTREE;
-    di.key.obj_type = TYPE_ROOT_ITEM;
+    di.key.obj_type = btrfs_key_type::ROOT_ITEM;
     di.key.offset = 0xffffffffffffffff;
     di.transid = 0;
     di.m = 0;
@@ -3719,17 +3719,17 @@ static void populate_root_root(root& root_root) {
     di.type = btrfs_inode_type::directory;
     memcpy(di.name, default_subvol, sizeof(default_subvol) - 1);
 
-    add_item_move(root_root, BTRFS_ROOT_TREEDIR, TYPE_DIR_ITEM, default_hash, buf);
+    add_item_move(root_root, BTRFS_ROOT_TREEDIR, btrfs_key_type::DIR_ITEM, default_hash, buf);
 }
 
 static void add_subvol_uuid(root& r) {
-    add_item(r, *(uint64_t*)&subvol_uuid, TYPE_SUBVOL_UUID, *(uint64_t*)&subvol_uuid.uuid[sizeof(uint64_t)],
+    add_item(r, *(uint64_t*)&subvol_uuid, btrfs_key_type::SUBVOL_UUID, *(uint64_t*)&subvol_uuid.uuid[sizeof(uint64_t)],
              &image_subvol_id, sizeof(image_subvol_id));
 }
 
 static void update_dir_sizes(root& r) {
     for (auto& it : r.items) {
-        if (it.first.obj_type == TYPE_INODE_ITEM && r.dir_size.count(it.first.obj_id) != 0) {
+        if (it.first.obj_type == btrfs_key_type::INODE_ITEM && r.dir_size.count(it.first.obj_id) != 0) {
             auto& ii = *(INODE_ITEM*)it.second.data();
 
             // FIXME - would it speed things up if we removed the entry from dir_size map here?

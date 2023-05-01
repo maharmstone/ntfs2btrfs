@@ -16,36 +16,38 @@ static const uint64_t superblock_addrs[] = { 0x10000, 0x4000000, 0x4000000000, 0
 #define MAX_LABEL_SIZE      0x100
 #define SUBVOL_ROOT_INODE   0x100
 
-#define TYPE_INODE_ITEM        0x01
-#define TYPE_INODE_REF         0x0C
-#define TYPE_INODE_EXTREF      0x0D
-#define TYPE_XATTR_ITEM        0x18
-#define TYPE_ORPHAN_INODE      0x30
-#define TYPE_DIR_ITEM          0x54
-#define TYPE_DIR_INDEX         0x60
-#define TYPE_EXTENT_DATA       0x6C
-#define TYPE_EXTENT_CSUM       0x80
-#define TYPE_ROOT_ITEM         0x84
-#define TYPE_ROOT_BACKREF      0x90
-#define TYPE_ROOT_REF          0x9C
-#define TYPE_EXTENT_ITEM       0xA8
-#define TYPE_METADATA_ITEM     0xA9
-#define TYPE_TREE_BLOCK_REF    0xB0
-#define TYPE_EXTENT_DATA_REF   0xB2
-#define TYPE_EXTENT_REF_V0     0xB4
-#define TYPE_SHARED_BLOCK_REF  0xB6
-#define TYPE_SHARED_DATA_REF   0xB8
-#define TYPE_BLOCK_GROUP_ITEM  0xC0
-#define TYPE_FREE_SPACE_INFO   0xC6
-#define TYPE_FREE_SPACE_EXTENT 0xC7
-#define TYPE_FREE_SPACE_BITMAP 0xC8
-#define TYPE_DEV_EXTENT        0xCC
-#define TYPE_DEV_ITEM          0xD8
-#define TYPE_CHUNK_ITEM        0xE4
-#define TYPE_TEMP_ITEM         0xF8
-#define TYPE_DEV_STATS         0xF9
-#define TYPE_SUBVOL_UUID       0xFB
-#define TYPE_SUBVOL_REC_UUID   0xFC
+enum class btrfs_key_type : uint8_t {
+    INODE_ITEM = 0x01,
+    INODE_REF = 0x0C,
+    INODE_EXTREF = 0x0D,
+    XATTR_ITEM = 0x18,
+    ORPHAN_INODE = 0x30,
+    DIR_ITEM = 0x54,
+    DIR_INDEX = 0x60,
+    EXTENT_DATA = 0x6C,
+    EXTENT_CSUM = 0x80,
+    ROOT_ITEM = 0x84,
+    ROOT_BACKREF = 0x90,
+    ROOT_REF = 0x9C,
+    EXTENT_ITEM = 0xA8,
+    METADATA_ITEM = 0xA9,
+    TREE_BLOCK_REF = 0xB0,
+    EXTENT_DATA_REF = 0xB2,
+    EXTENT_REF_V0 = 0xB4,
+    SHARED_BLOCK_REF = 0xB6,
+    SHARED_DATA_REF = 0xB8,
+    BLOCK_GROUP_ITEM = 0xC0,
+    FREE_SPACE_INFO = 0xC6,
+    FREE_SPACE_EXTENT = 0xC7,
+    FREE_SPACE_BITMAP = 0xC8,
+    DEV_EXTENT = 0xCC,
+    DEV_ITEM = 0xD8,
+    CHUNK_ITEM = 0xE4,
+    TEMP_ITEM = 0xF8,
+    DEV_STATS = 0xF9,
+    SUBVOL_UUID = 0xFB,
+    SUBVOL_REC_UUID = 0xFC
+};
 
 #define BTRFS_ROOT_ROOT         1
 #define BTRFS_ROOT_EXTENT       2
@@ -141,7 +143,7 @@ typedef struct {
 
 typedef struct {
     uint64_t obj_id;
-    uint8_t obj_type;
+    btrfs_key_type obj_type;
     uint64_t offset;
 } KEY;
 
@@ -437,8 +439,8 @@ typedef struct {
     uint32_t count;
 } SHARED_DATA_REF;
 
-#define FREE_SPACE_EXTENT 1
-#define FREE_SPACE_BITMAP 2
+static const uint8_t FREE_SPACE_EXTENT = 1;
+static const uint8_t FREE_SPACE_BITMAP = 2;
 
 typedef struct {
     uint64_t offset;
