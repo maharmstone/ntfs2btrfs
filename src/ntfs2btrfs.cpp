@@ -2173,6 +2173,11 @@ static void add_inode(root& r, uint64_t inode, uint64_t ntfs_inode, bool& is_dir
 
                     auto name2 = xattr_prefix + ads_name;
 
+                    if (name2.size() > 255) {
+                        add_warning("Skipping ADS :{} as name too long", ads_name);
+                        break;
+                    }
+
                     uint32_t hash = calc_crc32c(0xfffffffe, (const uint8_t*)name2.data(), (uint32_t)name2.length());
 
                     if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM && (ads_name != "WofCompressedData" || !processed_wof_data)) {
