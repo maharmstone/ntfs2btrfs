@@ -3857,7 +3857,7 @@ static void convert(ntfs& dev, enum btrfs_compression compression, enum btrfs_cs
 
         for (auto& r : roots) {
             if (r.id == BTRFS_ROOT_EXTENT || r.id == BTRFS_ROOT_CHUNK || r.id == BTRFS_ROOT_DEVTREE) {
-                r.old_addresses = r.addresses;
+                r.old_addresses.swap(r.addresses);
                 r.addresses.clear();
 
                 // FIXME - unallocate metadata and changed used value in chunks
