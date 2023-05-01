@@ -713,19 +713,27 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
     th.tree_id = id;
     th.level = 0;
 
+    auto get_address = [this](root& extent_root, uint8_t level) {
+        uint64_t ret;
+
+        if (!old_addresses.empty()) {
+            ret = old_addresses.front();
+            old_addresses.pop_front();
+        } else {
+            ret = allocate_metadata(id, extent_root, level);
+            allocations_done = true;
+        }
+
+        return ret;
+    };
+
     {
         auto ln = (leaf_node*)((uint8_t*)buf.data() + sizeof(tree_header));
         uint32_t data_off = tree_size - (uint32_t)sizeof(tree_header);
 
         for (const auto& i : items) {
             if (sizeof(leaf_node) + i.second.size() > space_left) { // tree complete, add to list
-                if (!old_addresses.empty()) {
-                    th.address = old_addresses.front();
-                    old_addresses.pop_front();
-                } else {
-                    th.address = allocate_metadata(id, extent_root, th.level);
-                    allocations_done = true;
-                }
+                th.address = get_address(extent_root, 0);
 
                 addresses.push_back(th.address);
                 th.num_items = num_items;
@@ -769,13 +777,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
     }
 
     if (num_items > 0 || items.size() == 0) { // flush remaining tree
-        if (!old_addresses.empty()) {
-            th.address = old_addresses.front();
-            old_addresses.pop_front();
-        } else {
-            th.address = allocate_metadata(id, extent_root, th.level);
-            allocations_done = true;
-        }
+        th.address = get_address(extent_root, 0);
 
         addresses.push_back(th.address);
         th.num_items = num_items;
@@ -825,13 +827,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
                 continue;
 
             if (sizeof(internal_node) > space_left) { // tree complete, add to list
-                if (!old_addresses.empty()) {
-                    th.address = old_addresses.front();
-                    old_addresses.pop_front();
-                } else {
-                    th.address = allocate_metadata(id, extent_root, th.level);
-                    allocations_done = true;
-                }
+                th.address = get_address(extent_root, level);
 
                 addresses.push_back(th.address);
                 th.num_items = num_items;
@@ -870,13 +866,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
         }
 
         if (num_items > 0) { // flush remaining tree
-            if (!old_addresses.empty()) {
-                th.address = old_addresses.front();
-                old_addresses.pop_front();
-            } else {
-                th.address = allocate_metadata(id, extent_root, th.level);
-                allocations_done = true;
-            }
+            th.address = get_address(extent_root, level);
 
             addresses.push_back(th.address);
             th.num_items = num_items;
