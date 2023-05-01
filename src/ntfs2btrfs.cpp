@@ -697,45 +697,6 @@ static void calc_tree_hash(tree_header& th, enum btrfs_csum_type csum_type) {
     }
 }
 
-static void change_metadata_level(root& extent_root, uint64_t addr, uint8_t level, uint8_t old_level) {
-    if (auto f = extent_root.items.find(KEY{addr, btrfs_key_type::METADATA_ITEM, old_level}); f != extent_root.items.end()) {
-        auto d = move(f->second);
-
-        extent_root.items.erase(f);
-        extent_root.items.emplace(make_pair(KEY{addr, btrfs_key_type::METADATA_ITEM, level}, d));
-    }
-
-    for (auto& t : extent_root.trees) {
-        auto& th = *(tree_header*)t.data();
-
-        if (th.level == 0) {
-            span ln((leaf_node*)((uint8_t*)t.data() + sizeof(tree_header)), th.num_items);
-
-            for (auto& n : ln) {
-                if (n.key.obj_id == addr && n.key.obj_type == btrfs_key_type::METADATA_ITEM) {
-                    n.key.offset = level;
-                    break;
-                }
-
-                if (n.key.obj_id > addr)
-                    break;
-            }
-        } else {
-            span in((internal_node*)((uint8_t*)t.data() + sizeof(tree_header)), th.num_items);
-
-            for (auto& n : in) {
-                if (n.key.obj_id == addr && n.key.obj_type == btrfs_key_type::METADATA_ITEM) {
-                    n.key.offset = level;
-                    break;
-                }
-
-                if (n.key.obj_id > addr)
-                    break;
-            }
-        }
-    }
-}
-
 void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
     uint32_t space_left, num_items;
     buffer_t buf(tree_size);
@@ -758,8 +719,14 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
         if (!old_addresses.empty()) {
             addr = old_addresses.front().first;
 
-            if (level != old_addresses.front().second)
-                change_metadata_level(extent_root, addr, level, old_addresses.front().second);
+            if (level != old_addresses.front().second) { // change metadata level in extent tree
+                if (auto f = extent_root.items.find(KEY{addr, btrfs_key_type::METADATA_ITEM, old_addresses.front().second}); f != extent_root.items.end()) {
+                    auto d = move(f->second);
+
+                    extent_root.items.erase(f);
+                    extent_root.items.emplace(make_pair(KEY{addr, btrfs_key_type::METADATA_ITEM, level}, d));
+                }
+            }
 
             old_addresses.pop_front();
         } else {
