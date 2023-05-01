@@ -697,6 +697,45 @@ static void calc_tree_hash(tree_header& th, enum btrfs_csum_type csum_type) {
     }
 }
 
+static void change_metadata_level(root& extent_root, uint64_t addr, uint8_t level, uint8_t old_level) {
+    if (auto f = extent_root.items.find(KEY{addr, TYPE_METADATA_ITEM, old_level}); f != extent_root.items.end()) {
+        auto d = move(f->second);
+
+        extent_root.items.erase(f);
+        extent_root.items.emplace(make_pair(KEY{addr, TYPE_METADATA_ITEM, level}, d));
+    }
+
+    for (auto& t : extent_root.trees) {
+        auto& th = *(tree_header*)t.data();
+
+        if (th.level == 0) {
+            span ln((leaf_node*)((uint8_t*)t.data() + sizeof(tree_header)), th.num_items);
+
+            for (auto& n : ln) {
+                if (n.key.obj_id == addr && n.key.obj_type == TYPE_METADATA_ITEM) {
+                    n.key.offset = level;
+                    break;
+                }
+
+                if (n.key.obj_id > addr)
+                    break;
+            }
+        } else {
+            span in((internal_node*)((uint8_t*)t.data() + sizeof(tree_header)), th.num_items);
+
+            for (auto& n : in) {
+                if (n.key.obj_id == addr && n.key.obj_type == TYPE_METADATA_ITEM) {
+                    n.key.offset = level;
+                    break;
+                }
+
+                if (n.key.obj_id > addr)
+                    break;
+            }
+        }
+    }
+}
+
 void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
     uint32_t space_left, num_items;
     buffer_t buf(tree_size);
@@ -714,17 +753,23 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
     th.level = 0;
 
     auto get_address = [this](root& extent_root, uint8_t level) {
-        uint64_t ret;
+        uint64_t addr;
 
         if (!old_addresses.empty()) {
-            ret = old_addresses.front();
+            addr = old_addresses.front().first;
+
+            if (level != old_addresses.front().second)
+                change_metadata_level(extent_root, addr, level, old_addresses.front().second);
+
             old_addresses.pop_front();
         } else {
-            ret = allocate_metadata(id, extent_root, level);
+            addr = allocate_metadata(id, extent_root, level);
             allocations_done = true;
         }
 
-        return ret;
+        addresses.emplace_back(addr, level);
+
+        return addr;
     };
 
     {
@@ -734,8 +779,6 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
         for (const auto& i : items) {
             if (sizeof(leaf_node) + i.second.size() > space_left) { // tree complete, add to list
                 th.address = get_address(extent_root, 0);
-
-                addresses.push_back(th.address);
                 th.num_items = num_items;
 
                 calc_tree_hash(th, csum_type);
@@ -778,8 +821,6 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
 
     if (num_items > 0 || items.size() == 0) { // flush remaining tree
         th.address = get_address(extent_root, 0);
-
-        addresses.push_back(th.address);
         th.num_items = num_items;
 
         calc_tree_hash(th, csum_type);
@@ -828,8 +869,6 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
 
             if (sizeof(internal_node) > space_left) { // tree complete, add to list
                 th.address = get_address(extent_root, level);
-
-                addresses.push_back(th.address);
                 th.num_items = num_items;
 
                 calc_tree_hash(th, csum_type);
@@ -867,8 +906,6 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
 
         if (num_items > 0) { // flush remaining tree
             th.address = get_address(extent_root, level);
-
-            addresses.push_back(th.address);
             th.num_items = num_items;
 
             calc_tree_hash(th, csum_type);
@@ -884,8 +921,6 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
     } while (true);
 
     tree_addr = ((tree_header*)trees.back().data())->address;
-
-    // FIXME - make sure level of METADATA_ITEMs is correct
 }
 
 void root::write_trees(ntfs& dev) {

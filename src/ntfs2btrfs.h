@@ -205,7 +205,7 @@ public:
     uint64_t tree_addr;
     uint8_t level;
     uint64_t metadata_size = 0;
-    std::list<uint64_t> addresses, old_addresses;
+    std::list<std::pair<uint64_t, uint8_t>> addresses, old_addresses;
     bool allocations_done = false;
     bool readonly = false;
     std::map<uint64_t, uint64_t> dir_seqs;
