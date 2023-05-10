@@ -42,6 +42,10 @@
 #include <sys/mman.h>
 #endif
 
+#if !defined(_WIN32) && !defined(__FreeBSD__)
+#define USE_MMAP
+#endif
+
 #include "config.h"
 
 using namespace std;
@@ -3337,7 +3341,7 @@ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint
     }
 }
 
-#ifndef _WIN32 // doesn't seem to work on Windows for volumes (CreateFileMapping returns ERROR_INVALID_PARAMETER)
+#ifdef USE_MMAP
 class memory_map {
 public:
     memory_map(int fd, uint64_t off, size_t length) : length(length) {
@@ -3433,7 +3437,7 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
         total += r.length;
     }
 
-#ifndef _WIN32
+#ifdef USE_MMAP
     unique_ptr<memory_map> mm;
     uint64_t old_chunk = 0;
 #endif
@@ -3446,7 +3450,7 @@ static void calc_checksums(root& csum_root, runs_t runs, ntfs& dev, enum btrfs_c
 
         csums.resize((size_t)(r.length * cluster_size * csum_size / sector_size));
 
-#ifndef _WIN32
+#ifdef USE_MMAP
         uint64_t chunk = (r.offset * cluster_size) / data_chunk_size;
 
         if (!mm || old_chunk != chunk) {
