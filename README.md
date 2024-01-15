@@ -50,6 +50,9 @@ below.
 Changelog
 ---------
 
+* 20240115
+  * Fixed compilation on GCC 14 (`-Werror=incompatible-pointer-types` now enabled by default)
+
 * 20230501
   * Fixed inline extent items being written out of order (not diagnosed by `btrfs check`)
   * Fixed metadata items being written with wrong level value (not diagnosed by `btrfs check`)

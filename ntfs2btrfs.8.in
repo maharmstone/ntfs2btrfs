@@ -1,4 +1,4 @@
-.TH NTFS2BTRFS "8" "May 2023" "ntfs2btrfs @PROJECT_VERSION@" "System Administration"
+.TH NTFS2BTRFS "8" "January 2024" "ntfs2btrfs @PROJECT_VERSION@" "System Administration"
 .SH NAME
 ntfs2btrfs \- convert ntfs filesystem to btrfs filesystem
 .SH SYNOPSIS

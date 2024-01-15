@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.14.3)
 cmake_policy(SET CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-project(ntfs2btrfs VERSION 20230501)
+project(ntfs2btrfs VERSION 20240115)
 
 include(GNUInstallDirs)
 
