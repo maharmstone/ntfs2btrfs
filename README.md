@@ -26,6 +26,9 @@ On Windows, from an Administrator command prompt:
 Bear in mind that it won't work with your boot drive or a drive containing a
 pagefile that's currently in use.
 
+If you are using WinBtrfs, you will need to clear the readonly flag on the
+`image` subvolume before you can delete it.
+
 On Linux, as root:
 
 `ntfs2btrfs /dev/sda1`
