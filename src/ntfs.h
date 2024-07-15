@@ -23,6 +23,7 @@
 #include <string>
 #include <list>
 #include <functional>
+#include <memory>
 
 #ifdef _WIN32
 #include <windows.h>
