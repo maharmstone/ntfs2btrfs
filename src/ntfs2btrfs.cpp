@@ -938,7 +938,7 @@ static void set_volume_label(superblock& sb, ntfs& dev) {
                 vn.pop_back();
             }
 
-            cerr << "Truncating volume label to \"" << vn << "\"" << endl;
+            cerr << "Truncating volume label to \"" << vn << "\"" << endl << flush;
         }
 
         // FIXME - check label doesn't contain slash or backslash
@@ -948,7 +948,7 @@ static void set_volume_label(superblock& sb, ntfs& dev) {
 
         memcpy(sb.label, vn.data(), vn.length());
     } catch (const exception& e) { // shouldn't be fatal
-        cerr << "Error while setting volume label: " << e.what() << endl;
+        cerr << "Error while setting volume label: " << e.what() << endl << flush;
     }
 }
 
@@ -4101,7 +4101,7 @@ Convert an NTFS filesystem to Btrfs.
 
         convert(dev, compression, csum_type, nocsum);
     } catch (const exception& e) {
-        cerr << e.what() << endl;
+        cerr << e.what() << endl << flush;
         return 1;
     }
 
