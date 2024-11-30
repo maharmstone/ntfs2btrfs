@@ -829,8 +829,8 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
 
         auto in = (internal_node*)((uint8_t*)buf.data() + sizeof(tree_header));
 
-        for (const auto& t : trees) {
-            auto th2 = (tree_header*)t.data();
+        for (size_t i = 0; i < trees.size(); i++) {
+            auto th2 = (tree_header*)trees[i].data();
 
             if (th2->level >= level)
                 break;
@@ -863,7 +863,7 @@ void root::create_trees(root& extent_root, enum btrfs_csum_type csum_type) {
                 trees_added++;
             }
 
-            auto ln = (leaf_node*)((uint8_t*)t.data() + sizeof(tree_header));
+            auto ln = (leaf_node*)((uint8_t*)trees[i].data() + sizeof(tree_header));
 
             in->key = ln->key;
             in->address = th2->address;
