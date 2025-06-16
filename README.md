@@ -53,6 +53,9 @@ below.
 Changelog
 ---------
 
+* 20250616
+  * Fixed compilation on GCC 15
+
 * 20240115
   * Fixed compilation on GCC 14 (`-Werror=incompatible-pointer-types` now enabled by default)
 
