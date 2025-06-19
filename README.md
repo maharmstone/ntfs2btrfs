@@ -37,7 +37,7 @@ Installation
 ------------
 
 On Windows, go to the [Releases page](https://github.com/maharmstone/ntfs2btrfs/releases) and
-download the latest Zip file, or use [Scoop](https://github.com/ScoopInstaller/Main/blob/master/bucket/ntfs2btrfs.json).
+download the latest Zip file, or use [Winget](https://github.com/microsoft/winget-pkgs/tree/master/manifests/m/maharmstone/Ntfs2btrfs) or [Scoop](https://scoop.sh/#/apps?q=ntfs2btrfs&id=8590cbf84c664d085381ea706f6eafa4011e3e0b).
 
 For Linux:
 * [Arch](https://aur.archlinux.org/packages/ntfs2btrfs)
