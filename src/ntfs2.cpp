@@ -160,19 +160,17 @@ void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER& att, list<mapping>
     }
 }
 
-buffer_t ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att) {
-    list<mapping> mappings;
+buffer_t ntfs_file::read_nonresident_data(uint64_t offset, uint32_t length, uint64_t file_size,
+                                          const list<mapping>& mappings) {
     uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
-
-    read_nonresident_mappings(*att, mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
 
     // FIXME - do we need to check that mappings is contiguous and in order?
 
-    if (offset >= (uint64_t)att->Form.Nonresident.FileSize)
+    if (offset >= (uint64_t)file_size)
         return {};
 
-    if (offset + length > (uint64_t)att->Form.Nonresident.FileSize || length == 0)
-        length = (uint32_t)(att->Form.Nonresident.FileSize - offset);
+    if (offset + length > (uint64_t)file_size || length == 0)
+        length = (uint32_t)(file_size - offset);
 
     buffer_t ret(length);
     memset(ret.data(), 0, length);
@@ -231,9 +229,34 @@ buffer_t ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length,
     return ret;
 }
 
+buffer_t ntfs_file::read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att) {
+    list<mapping> mappings;
+    uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+
+    read_nonresident_mappings(*att, mappings, cluster_size, att->Form.Nonresident.ValidDataLength);
+
+    return read_nonresident_data(offset, length, att->Form.Nonresident.FileSize, mappings);
+}
+
 buffer_t ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute type, u16string_view name) {
+    // Depth guard: read_mappings() walks the attribute list, which may
+    // construct an ntfs_file for an extension record, whose constructor reads
+    // $MFT:$DATA and lands back here. At depth > 1 we must use only the base
+    // record's runs -- which is correct, because the extension records always
+    // live inside the first fragment.
+    static thread_local unsigned int read_depth = 0;
+
+    struct depth_guard {
+        unsigned int& d;
+        explicit depth_guard(unsigned int& dd) : d(dd) { d++; }
+        ~depth_guard() { d--; }
+    } guard(read_depth);
+
     buffer_t ret;
     bool found = false;
+    bool nonresident = false;
+    uint64_t file_size = 0;
+    list<mapping> base_mappings;
 
     loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, string_view res_data, u16string_view att_name) -> bool {
         if (att.TypeCode != type || name != att_name)
@@ -245,9 +268,22 @@ buffer_t ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute t
         if (att.Flags & ATTRIBUTE_FLAG_COMPRESSION_MASK)
             throw formatted_error("FIXME - handle reading compressed attribute"); // FIXME
 
-        if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM)
-            ret = read_nonresident_attribute(offset, length, &att);
-        else {
+        if (att.FormCode == NTFS_ATTRIBUTE_FORM::NONRESIDENT_FORM) {
+            // Defer the actual read. The attribute may span several MFT
+            // records, and gathering mappings here would nest
+            // loop_through_atts inside itself, invalidating this iteration.
+            if (att.Form.Nonresident.LowestVcn != 0)
+                return true;    // not the base record; keep looking
+
+            nonresident = true;
+            file_size = att.Form.Nonresident.FileSize;
+
+            // Keep the base record's own runs: needed as a fallback when this
+            // call is itself nested inside loop_through_atts.
+            read_nonresident_mappings(att, base_mappings,
+                                      dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster,
+                                      att.Form.Nonresident.ValidDataLength);
+        } else {
             if (offset >= res_data.length())
                 ret.clear();
             else {
@@ -268,11 +304,40 @@ buffer_t ntfs_file::read(uint64_t offset, uint32_t length, enum ntfs_attribute t
     if (!found)
         throw formatted_error("Attribute not found.");
 
+    if (nonresident) {
+        bool is_data = (type == ntfs_attribute::DATA && name.empty());
+        list<mapping> mappings;
+
+        if (is_data && data_mappings_cached)
+            mappings = data_mappings_cache;
+        else if (read_depth == 1) {
+            mappings = read_mappings(type, name);
+
+            if (is_data) {
+                data_mappings_cache = mappings;
+                data_mappings_cached = true;
+            }
+        } else
+            mappings = std::move(base_mappings);
+
+        ret = read_nonresident_data(offset, length, file_size, mappings);
+    }
+
     return ret;
 }
 
 list<mapping> ntfs_file::read_mappings(enum ntfs_attribute type, u16string_view name) {
     list<mapping> mappings;
+
+    // A large attribute is split across several MFT records via $ATTRIBUTE_LIST,
+    // each record covering a different VCN range. Returning false after the
+    // first match silently drops every later extent; the caller then reads
+    // zeroes for that part of the attribute. On a large volume this makes most
+    // of $MFT:$BITMAP read back as zero, so most files look like free records.
+    //
+    // ValidDataLength is only meaningful on the record with LowestVcn == 0, so
+    // collect it first, then walk every matching record.
+    uint64_t vdl = 0;
 
     loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, string_view, u16string_view att_name) -> bool {
         if (att.TypeCode != type || name != att_name)
@@ -281,11 +346,21 @@ list<mapping> ntfs_file::read_mappings(enum ntfs_attribute type, u16string_view 
         if (att.FormCode == NTFS_ATTRIBUTE_FORM::RESIDENT_FORM)
             throw formatted_error("Attribute is resident");
 
-        uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+        if (att.Form.Nonresident.LowestVcn == 0)
+            vdl = att.Form.Nonresident.ValidDataLength;
 
-        read_nonresident_mappings(att, mappings, cluster_size, att.Form.Nonresident.ValidDataLength);
+        return true;
+    });
 
-        return false;
+    uint32_t cluster_size = dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster;
+
+    loop_through_atts([&](const ATTRIBUTE_RECORD_HEADER& att, string_view, u16string_view att_name) -> bool {
+        if (att.TypeCode != type || name != att_name)
+            return true;
+
+        read_nonresident_mappings(att, mappings, cluster_size, vdl);
+
+        return true;
     });
 
     return mappings;
