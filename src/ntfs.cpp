@@ -476,6 +476,13 @@ public:
 
 private:
     buffer_t read_nonresident_attribute(uint64_t offset, uint32_t length, const ATTRIBUTE_RECORD_HEADER* att);
+    buffer_t read_nonresident_data(uint64_t offset, uint32_t length, uint64_t file_size,
+                                   const list<mapping>& mappings);
+
+    // Cache of $DATA mappings. Reading any MFT record goes through
+    // $MFT:$DATA, so recomputing it every time would be pathological.
+    list<mapping> data_mappings_cache;
+    bool data_mappings_cached = false;
 
     buffer_t file_record_buf;
     ntfs& dev;
