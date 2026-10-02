@@ -44,6 +44,9 @@ import win32;
 
 using namespace std;
 
+// The NTFS update sequence stride is always 512 bytes, regardless of BytesPerSector.
+static const unsigned int NTFS_FIXUP_STRIDE = 512;
+
 static void process_fixups(MULTI_SECTOR_HEADER* header, uint64_t length, unsigned int sector_size) {
     uint64_t sectors;
     uint16_t* seq;
@@ -90,7 +93,7 @@ ntfs_file::ntfs_file(ntfs& dev, uint64_t inode) : dev(dev), inode(inode) {
                               file_record->MultiSectorHeader.Signature, NTFS_FILE_SIGNATURE);
     }
 
-    process_fixups(&file_record->MultiSectorHeader, dev.file_record_size, dev.boot_sector->BytesPerSector);
+    process_fixups(&file_record->MultiSectorHeader, dev.file_record_size, NTFS_FIXUP_STRIDE);
 }
 
 void read_nonresident_mappings(const ATTRIBUTE_RECORD_HEADER& att, list<mapping>& mappings,
@@ -432,7 +435,7 @@ static optional<buffer_t> btree_search(const index_root& ir, const list<mapping>
                 if (rec.MultiSectorHeader.Signature != INDEX_RECORD_MAGIC)
                     throw formatted_error("Index record magic was not INDX.");
 
-                process_fixups(&rec.MultiSectorHeader, ir.bytes_per_index_record, dev.boot_sector->BytesPerSector);
+                process_fixups(&rec.MultiSectorHeader, ir.bytes_per_index_record, NTFS_FIXUP_STRIDE);
 
                 return btree_search(ir, mappings, rec.header, dev, key);
             }
@@ -507,7 +510,7 @@ static void walk_btree(const index_root& ir, const list<mapping>& mappings, cons
             if (rec->MultiSectorHeader.Signature != INDEX_RECORD_MAGIC)
                 throw formatted_error("Index record magic was not INDX.");
 
-            process_fixups(&rec->MultiSectorHeader, ir.bytes_per_index_record, dev.boot_sector->BytesPerSector);
+            process_fixups(&rec->MultiSectorHeader, ir.bytes_per_index_record, NTFS_FIXUP_STRIDE);
 
             walk_btree(ir, mappings, rec->header, dev, func, level + 1);
         } else
