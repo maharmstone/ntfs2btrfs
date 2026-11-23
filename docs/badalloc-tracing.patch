@@ -1,0 +1,78 @@
+diff --git a/src/ntfs2btrfs.cpp b/src/ntfs2btrfs.cpp
+index 51fe727..624fa4d 100755
+--- a/src/ntfs2btrfs.cpp
++++ b/src/ntfs2btrfs.cpp
+@@ -39,6 +39,21 @@
+ #include <map>
+ #include <getopt.h>
+ #include <assert.h>
++#include <cstdlib>
++
++// DBG: log large allocations to help track down bad_alloc
++void* operator new(std::size_t dbg_n) {
++    if (dbg_n > (128ULL << 20))
++        fprintf(stderr, "DBG new BIG: %zu bytes (%.2f GiB)\n", dbg_n, (double)dbg_n / 1073741824.0);
++    void* dbg_p = std::malloc(dbg_n ? dbg_n : 1);
++    if (!dbg_p) throw std::bad_alloc();
++    return dbg_p;
++}
++void operator delete(void* dbg_p) noexcept { std::free(dbg_p); }
++void operator delete(void* dbg_p, std::size_t) noexcept { std::free(dbg_p); }
++void* operator new[](std::size_t dbg_n) { return operator new(dbg_n); }
++void operator delete[](void* dbg_p) noexcept { std::free(dbg_p); }
++void operator delete[](void* dbg_p, std::size_t) noexcept { std::free(dbg_p); }
+ 
+ #ifdef _WIN32
+ #include <windows.h>
+@@ -1352,6 +1367,7 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode,
+     ed.other_encoding = 0;
+     ed.type = btrfs_file_extent_item_type::reg;
+ 
++    uint64_t dbg_img_n = 0;
+     for (const auto& rs : runs) {
+         for (const auto& run : rs.second) {
+             uint64_t addr;
+@@ -1359,6 +1375,8 @@ static void create_image(root& r, ntfs& dev, const runs_t& runs, uint64_t inode,
+             if (run.relocated || run.not_in_img)
+                 continue;
+ 
++            if (++dbg_img_n % 10000 == 0) { fprintf(stderr, "DBG image run %llu\n", (unsigned long long)dbg_img_n); fflush(stderr); }
++
+             ed.ram_bytes = ed.disk_num_bytes = ed.num_bytes = run.length * cluster_size;
+ 
+             addr = run.offset * cluster_size;
+@@ -3228,6 +3246,7 @@ static uint64_t get_extent_data_ref_hash2(uint64_t root, uint64_t objid, uint64_
+ 
+ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint32_t cluster_size, uint64_t image_subvol_id,
+                                      uint64_t image_inode) {
++    uint64_t dbg_ext_n = 0;
+     for (const auto& rs : runs) {
+         for (const auto& r : rs.second) {
+             uint64_t img_addr;
+@@ -3235,6 +3254,8 @@ static void create_data_extent_items(root& extent_root, const runs_t& runs, uint
+             if (r.inode == dummy_inode)
+                 continue;
+ 
++            if (++dbg_ext_n % 10000 == 0) { fprintf(stderr, "DBG extent run %llu\n", (unsigned long long)dbg_ext_n); fflush(stderr); }
++
+             if (r.relocated) {
+                 for (const auto& reloc : relocs) {
+                     if (reloc.old_start == r.offset) {
+@@ -3800,13 +3821,18 @@ static void convert(ntfs& dev, btrfs_compression_type compression,
+     print("Rewrote {} inodes.\n", rewritten_inodes);
+     print("Inlined {} inodes.\n", inline_inodes);
+ 
++    fprintf(stderr, "DBG: create_image start\n"); fflush(stderr);
+     create_image(image_subvol, dev, runs, image_inode, nocsum);
++    fprintf(stderr, "DBG: create_image done\n"); fflush(stderr);
+ 
+     roots.emplace_back(BTRFS_UUID_TREE_OBJECTID);
+     add_subvol_uuid(roots.back());
++    fprintf(stderr, "DBG: subvol uuid done\n"); fflush(stderr);
+ 
++    fprintf(stderr, "DBG: create_data_extent_items start\n"); fflush(stderr);
+     create_data_extent_items(extent_root, runs, dev.boot_sector->BytesPerSector * dev.boot_sector->SectorsPerCluster,
+                              image_subvol.id, image_inode);
++    fprintf(stderr, "DBG: create_data_extent_items done\n"); fflush(stderr);
+ 
+     print("Updating directory sizes\n");
