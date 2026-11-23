@@ -165,7 +165,7 @@ Two things that helped here:
 - Delete regenerable dependency trees (`node_modules`, `.output`) first — they come back with `pnpm install` / `npm install`.
 - Run with `MALLOC_ARENA_MAX=1`, e.g. `sudo MALLOC_ARENA_MAX=1 ntfs2btrfs -c none -d /dev/sda1`.
 
-See issue [LINK](LINK) for details and the tracing patch.
+See issue [#104](https://github.com/maharmstone/ntfs2btrfs/issues/104) for details and the tracing patch.
 
 Can I boot Windows from Btrfs with this?
 ----------------------------------------
