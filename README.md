@@ -155,6 +155,18 @@ What doesn't work
 * Cluster sizes over 1MB
 * Encrypted files
 
+
+## Converting volumes with a very large number of inodes
+
+If the source volume has around a million inodes (lots of node_modules, small files, old Windows leftovers), the conversion can die at 100% with `std::bad_alloc` even with plenty of RAM and swap.
+
+Two things that helped here:
+
+- Delete regenerable dependency trees (`node_modules`, `.output`) first — they come back with `pnpm install` / `npm install`.
+- Run with `MALLOC_ARENA_MAX=1`, e.g. `sudo MALLOC_ARENA_MAX=1 ntfs2btrfs -c none -d /dev/sda1`.
+
+See issue [LINK](LINK) for details and the tracing patch.
+
 Can I boot Windows from Btrfs with this?
 ----------------------------------------
 
